@@ -312,7 +312,7 @@ local DefaultText = {
 	},
 	deltastream = {
 		weatherName = "Strong Winds",
-		start = "  Mysterious strong winds are protecting Flying-type Pok\u00E9mon!",
+		start = "  Mysterious strong winds are protecting Flying-type Pokèmon!",
 		_end = "  The mysterious strong winds have dissipated!",
 		activate = "  The mysterious strong winds weakened the attack!",
 		block = "  The mysterious strong winds blow on regardless!",
