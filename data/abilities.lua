@@ -34,7 +34,7 @@ Ratings and how they work:
 
 -- FIXME this references
 
-require 'data/util'
+require("data/util")
 
 local Abilities = {
 	noability = {
@@ -46,353 +46,416 @@ local Abilities = {
 	},
 	adaptability = {
 		onModifySTAB = function(_this, stab, source, _target, move)
-      if move.forceSTAB or source.hasType(move.type) then
-        if stab == 2 then
-          return 2.25
-        end
-        return 2
-      end
-    end,
-    flags = {},
-    name = "Adaptability",
-    rating = 4,
-    num = 91,
-  },
-  aerilate = {
-    onModifyTypePriority = -1,
-    onBasePowerPriority = 23,
-    onModifyType = function(this, move, pokemon)
-      local noModifyType = {
-        'judgment', 'multiattack', 'naturalgift', 'revelationdance', 'technoblast', 'terrainpulse', 'weatherball',
-      }
+			if move.forceSTAB or source.hasType(move.type) then
+				if stab == 2 then
+					return 2.25
+				end
+				return 2
+			end
+		end,
+		flags = {},
+		name = "Adaptability",
+		rating = 4,
+		num = 91,
+	},
+	aerilate = {
+		onModifyTypePriority = -1,
+		onBasePowerPriority = 23,
+		onModifyType = function(this, move, pokemon)
+			local noModifyType = {
+				"judgment",
+				"multiattack",
+				"naturalgift",
+				"revelationdance",
+				"technoblast",
+				"terrainpulse",
+				"weatherball",
+			}
 
-      if (move.type == 'Normal'
-        and not table.contains(noModifyType, move.id)
-        and not (move.isZ and move.category ~= 'Status')
-        and not (move.name == 'Tera Blast' and pokemon.terastallized)) then
-        move.type = 'Flying'
-        move.typeChangerBoosted = this.effect
-      end
-    end,
-    onBasePower = function(this, _basePower, _pokemon, target, move)
-      if move.typeChangerBoosted == this.effect then return this.chainModify({4915, 4096}) end
-    end,
-    flags = {},
-    name = "Aerilate",
-    rating = 4,
-    num = 184,
-  },
-  aftermath = {
-    onDamagingHitOrder = 1,
-    onDamagingHit = function(this, _damage, target, source, move)
-      if not target.hp and this.checkMoveMakesContact(move, source, target, true) then
-        this.damage(source.baseMaxhp / 4, source, target)
-      end
-    end,
-    flags = {},
-    name = "Aftermath",
-    rating = 2,
-    num = 106,
-  },
-  airlock = {
-    onSwitchIn = function(this, _pokemon)
-      this.effectState.switchingIn = true
-    end,
-    onStart = function(this, pokemon)
-      -- Air Lock does not activate when Skill Swapped or when Neutralizing Gas leaves the field
-      pokemon.abilityState.ending = false -- Clear the ending flag
-      if this.effectState.switchingIn then
-        this.add('-ability', pokemon, 'Air Lock')
-        this.effectState.switchingIn = false
-      end
-      this.eachEvent('WeatherChange', this.effect)
-    end,
-    onEnd = function(this, pokemon)
-      pokemon.abilityState.ending = true
-      this.eachEvent('WeatherChange', this.effect)
-    end,
-    suppressWeather = true,
-    flags = {},
-    name = "Air Lock",
-    rating = 1.5,
-    num = 76,
-  },
-  analytic = {
-    onBasePowerPriority = 21,
-    onBasePower = function(this, _basePower, pokemon)
-      local boosted = true
-      for target in this.getAllActive() do
-        if (target == pokemon) then goto continue end
-        if this.queue.willMove(target) then
-          boosted = false
-          break
-      end
-        ::continue::
-      end
-      if boosted then
-        this.debug('Analytic boost')
-        return this.chainModify({5325, 4096})
-      end
-    end,
-    flags = {},
-    name = "Analytic",
-    rating = 2.5,
-    num = 148,
-  },
-  angerpoint = {
-    onHit = function(this, target, _source, move)
-      if (not target.hp) then return end
-      if (move and move.effectType == 'Move') and target.getMoveHitData(move).crit then
-        this.boost({atk = 12}, target, target)
-      end
-    end,
-    flags = {},
-    name = "Anger Point",
-    rating = 1,
-    num = 83,
-  },
-  angershell = {
-    onDamage = function(this, damage, target, source, effect)
-      if
-        effect.effectType == "Move" and
-        not effect.multihit and
-        (not effect.negateSecondary and not (effect.hasSheerForce and source.hasAbility('sheerforce')))
-      then
-        this.effectState.checkedAngerShell = false
-      else
-        this.effectState.checkedAngerShell = true
-      end
-    end,
-    onTryEatItem = function(this, item)
-      local healingItems = {
-        'aguavberry', 'enigmaberry', 'figyberry', 'iapapaberry', 'magoberry', 'sitrusberry', 'wikiberry', 'oranberry', 'berryjuice',
-      }
-      if table.contains(healingItems, item.id) then 
-        return this.effectState.checkedAngerShell
-      end
-      return true end,
-    onAfterMoveSecondary = function(this, target, source, move)
-      this.effectState.checkedAngerShell = true
-      if (not source or source == target or not target.hp or not move.totalDamage) then return end
-      local lastAttackedBy = target.getLastAttackedBy()
-      if (not lastAttackedBy) then return end
-      local damage = move.multihit and move.totalDamage or lastAttackedBy.damage
-      if target.hp <= target.maxhp / 2 and target.hp + damage > target.maxhp / 2 then
-        this.boost({atk = 1, spa = 1, spe = 1, def = -1, spd = -1}, target, target)
-      end
-    end,
-    flags = {},
-    name = "Anger Shell",
-    rating = 3,
-    num = 271,
-  },
-  anticipation = {
-    onStart = function(this, pokemon)
-      for target in pokemon.foes() do
-        for moveSlot in target.moveSlots do
-          local move = this.dex.moves.get(moveSlot.move)
-          if (move.category == 'Status') then goto continue end
-          local moveType = move.id == 'hiddenpower' and target.hpType or move.type
-          if this.dex.getImmunity(moveType, pokemon) and this.dex.getEffectiveness(moveType, pokemon) > 0 or move.ohko then
-            this.add('-ability', pokemon, 'Anticipation')
-            return
-          end
-          ::continue::
-        end
-      end
-    end,
-    flags = {},
-    name = "Anticipation",
-    rating = 0.5,
-    num = 107,
-  },
-  arenatrap = {
-    onFoeTrapPokemon = function(this, pokemon)
-      if not pokemon.isAdjacent(this.effectState.target) then return end
-      if pokemon.isGrounded() then
-        pokemon.tryTrap(true)
-      end
-    end,
-    onFoeMaybeTrapPokemon = function(this, pokemon, source)
-      if not source then source = this.effectState.target end
-      if not source or not pokemon.isAdjacent(source) then return end
-      if pokemon.isGrounded(not pokemon.knownType) then -- Negate immunity if the type is unknown
-        pokemon.maybeTrapped = true
-      end
-    end,
-    flags = {},
-    name = "Arena Trap",
-    rating = 5,
-    num = 71,
-  },
-  armortail = {
-    onFoeTryMove = function(this, target, source, move)
-      local targetAllExceptions = {'perishsong', 'flowershield', 'rototiller'}
-      if move.target == 'foeSide' or (move.target == 'all' and not targetAllExceptions.includes(move.id)) then
-        return
-    end
+			if
+				move.type == "Normal"
+				and not table.contains(noModifyType, move.id)
+				and not (move.isZ and move.category ~= "Status")
+				and not (move.name == "Tera Blast" and pokemon.terastallized)
+			then
+				move.type = "Flying"
+				move.typeChangerBoosted = this.effect
+			end
+		end,
+		onBasePower = function(this, _basePower, _pokemon, target, move)
+			if move.typeChangerBoosted == this.effect then
+				return this.chainModify({ 4915, 4096 })
+			end
+		end,
+		flags = {},
+		name = "Aerilate",
+		rating = 4,
+		num = 184,
+	},
+	aftermath = {
+		onDamagingHitOrder = 1,
+		onDamagingHit = function(this, _damage, target, source, move)
+			if not target.hp and this.checkMoveMakesContact(move, source, target, true) then
+				this.damage(source.baseMaxhp / 4, source, target)
+			end
+		end,
+		flags = {},
+		name = "Aftermath",
+		rating = 2,
+		num = 106,
+	},
+	airlock = {
+		onSwitchIn = function(this, _pokemon)
+			this.effectState.switchingIn = true
+		end,
+		onStart = function(this, pokemon)
+			-- Air Lock does not activate when Skill Swapped or when Neutralizing Gas leaves the field
+			pokemon.abilityState.ending = false -- Clear the ending flag
+			if this.effectState.switchingIn then
+				this.add("-ability", pokemon, "Air Lock")
+				this.effectState.switchingIn = false
+			end
+			this.eachEvent("WeatherChange", this.effect)
+		end,
+		onEnd = function(this, pokemon)
+			pokemon.abilityState.ending = true
+			this.eachEvent("WeatherChange", this.effect)
+		end,
+		suppressWeather = true,
+		flags = {},
+		name = "Air Lock",
+		rating = 1.5,
+		num = 76,
+	},
+	analytic = {
+		onBasePowerPriority = 21,
+		onBasePower = function(this, _basePower, pokemon)
+			local boosted = true
+			for target in this.getAllActive() do
+				if target == pokemon then
+					goto continue
+				end
+				if this.queue.willMove(target) then
+					boosted = false
+					break
+				end
+				::continue::
+			end
+			if boosted then
+				this.debug("Analytic boost")
+				return this.chainModify({ 5325, 4096 })
+			end
+		end,
+		flags = {},
+		name = "Analytic",
+		rating = 2.5,
+		num = 148,
+	},
+	angerpoint = {
+		onHit = function(this, target, _source, move)
+			if not target.hp then
+				return
+			end
+			if (move and move.effectType == "Move") and target.getMoveHitData(move).crit then
+				this.boost({ atk = 12 }, target, target)
+			end
+		end,
+		flags = {},
+		name = "Anger Point",
+		rating = 1,
+		num = 83,
+	},
+	angershell = {
+		onDamage = function(this, damage, target, source, effect)
+			if
+				effect.effectType == "Move"
+				and not effect.multihit
+				and (not effect.negateSecondary and not (effect.hasSheerForce and source.hasAbility("sheerforce")))
+			then
+				this.effectState.checkedAngerShell = false
+			else
+				this.effectState.checkedAngerShell = true
+			end
+		end,
+		onTryEatItem = function(this, item)
+			local healingItems = {
+				"aguavberry",
+				"enigmaberry",
+				"figyberry",
+				"iapapaberry",
+				"magoberry",
+				"sitrusberry",
+				"wikiberry",
+				"oranberry",
+				"berryjuice",
+			}
+			if table.contains(healingItems, item.id) then
+				return this.effectState.checkedAngerShell
+			end
+			return true
+		end,
+		onAfterMoveSecondary = function(this, target, source, move)
+			this.effectState.checkedAngerShell = true
+			if not source or source == target or not target.hp or not move.totalDamage then
+				return
+			end
+			local lastAttackedBy = target.getLastAttackedBy()
+			if not lastAttackedBy then
+				return
+			end
+			local damage = move.multihit and move.totalDamage or lastAttackedBy.damage
+			if target.hp <= target.maxhp / 2 and target.hp + damage > target.maxhp / 2 then
+				this.boost({ atk = 1, spa = 1, spe = 1, def = -1, spd = -1 }, target, target)
+			end
+		end,
+		flags = {},
+		name = "Anger Shell",
+		rating = 3,
+		num = 271,
+	},
+	anticipation = {
+		onStart = function(this, pokemon)
+			for target in pokemon.foes() do
+				for moveSlot in target.moveSlots do
+					local move = this.dex.moves.get(moveSlot.move)
+					if move.category == "Status" then
+						goto continue
+					end
+					local moveType = move.id == "hiddenpower" and target.hpType or move.type
+					if
+						this.dex.getImmunity(moveType, pokemon) and this.dex.getEffectiveness(moveType, pokemon) > 0
+						or move.ohko
+					then
+						this.add("-ability", pokemon, "Anticipation")
+						return
+					end
+					::continue::
+				end
+			end
+		end,
+		flags = {},
+		name = "Anticipation",
+		rating = 0.5,
+		num = 107,
+	},
+	arenatrap = {
+		onFoeTrapPokemon = function(this, pokemon)
+			if not pokemon.isAdjacent(this.effectState.target) then
+				return
+			end
+			if pokemon.isGrounded() then
+				pokemon.tryTrap(true)
+			end
+		end,
+		onFoeMaybeTrapPokemon = function(this, pokemon, source)
+			if not source then
+				source = this.effectState.target
+			end
+			if not source or not pokemon.isAdjacent(source) then
+				return
+			end
+			if pokemon.isGrounded(not pokemon.knownType) then -- Negate immunity if the type is unknown
+				pokemon.maybeTrapped = true
+			end
+		end,
+		flags = {},
+		name = "Arena Trap",
+		rating = 5,
+		num = 71,
+	},
+	armortail = {
+		onFoeTryMove = function(this, target, source, move)
+			local targetAllExceptions = { "perishsong", "flowershield", "rototiller" }
+			if
+				move.target == "foeSide" or (move.target == "all" and not table.contains(targetAllExceptions, move.id))
+			then
+				return
+			end
 
-      local armorTailHolder = this.effectState.target
-      if (source.isAlly(armorTailHolder) or move.target == 'all') and move.priority > 0.1 then this.attrLastMove('[still]')
-        this.add('cant', armorTailHolder, 'ability = Armor Tail', move, '[of] ' + target)
-        return false
-      end
-    end,
-    flags = {breakable = 1},
-    name = "Armor Tail",
-    rating = 2.5,
-    num = 296,
-  },
-  aromaveil = {
-    onAllyTryAddVolatile = function(this, status, target, source, effect)
-      if ({'attract', 'disable', 'encore', 'healblock', 'taunt', 'torment'}).includes(status.id) then
-        if effect.effectType == 'Move' then
-          local effectHolder = this.effectState.target
-          this.add('-block', target, 'ability = Aroma Veil', '[of] ' + effectHolder)
-        end
-        return nil
-      end
-    end,
-    flags = {breakable = 1},
-    name = "Aroma Veil",
-    rating = 2,
-    num = 165,
-  },
-  asoneglastrier = {
-    onPreStart = function(this, pokemon)
-      this.add('-ability', pokemon, 'As One')
-      this.add('-ability', pokemon, 'Unnerve')
-      this.effectState.unnerved = true
-    end,
-    onEnd = function(this)
-      this.effectState.unnerved = false
-    end,
-    onFoeTryEatItem = function(this)
-      return not this.effectState.unnerved
-    end,
-    onSourceAfterFaint = function(this, length, target, source, effect)
-      if effect and effect.effectType == 'Move' then
-        this.boost({atk = length}, source, source, this.dex.abilities.get('chillingneigh'))
-      end
-    end,
-    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
-    name = "As One (Glastrier)",
-    rating = 3.5,
-    num = 266,
-  },
-  asonespectrier = {
-    onPreStart = function(this, pokemon)
-      this.add('-ability', pokemon, 'As One')
-      this.add('-ability', pokemon, 'Unnerve')
-      this.effectState.unnerved = true
-    end,
-    onEnd = function(this)
-      this.effectState.unnerved = false
-    end,
-    onFoeTryEatItem = function(this)
-      return not this.effectState.unnerved
-    end,
-    onSourceAfterFaint = function(this, length, target, source, effect)
-      if (effect and effect.effectType == 'Move') then
-        this.boost({spa = length}, source, source, this.dex.abilities.get('grimneigh'))
-      end
-    end,
-    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
-    name = "As One (Spectrier)",
-    rating = 3.5,
-    num = 267,
-  },
-  aurabreak = {
-    onStart = function(this, pokemon)
-      if this.suppressingAbility(pokemon) then return end
-      this.add('-ability', pokemon, 'Aura Break')
-    end,
-    onAnyTryPrimaryHit = function(this, target, source, move)
-      if (target == source or move.category == 'Status') then return end
-      move.hasAuraBreak = true
-    end,
-    flags = {breakable = 1},
-    name = "Aura Break",
-    rating = 1,
-    num = 188,
-  },
-  baddreams = {
-    onResidualOrder = 28,
-    onResidualSubOrder = 2,
-    onResidual = function(this, pokemon)
-      if not pokemon.hp then return end
-      for target in pokemon.foes() do
-        if target.status == 'slp' or target.hasAbility('comatose') then
-          this.damage(target.baseMaxhp / 8, target, pokemon)
-        end
-      end
-    end,
-    flags = {},
-    name = "Bad Dreams",
-    rating = 1.5,
-    num = 123,
-  },
-  ballfetch = {
-    flags = {},
-    name = "Ball Fetch",
-    rating = 0,
-    num = 237,
-  },
-  battery = {
-    onAllyBasePowerPriority = 22,
-    onAllyBasePower = function(this, basePower, attacker, defender, move)
-      if attacker ~= this.effectState.target and move.category == 'Special' then
-        this.debug('Battery boost')
-        return this.chainModify({5325, 4096})
-      end
-    end,
-    flags = {},
-    name = "Battery",
-    rating = 0,
-    num = 217,
-  },
-  battlearmor = {
-    onCriticalHit = false,
-    flags = {breakable = 1},
-    name = "Battle Armor",
-    rating = 1,
-    num = 4,
-  },
-  battlebond = {
-    onSourceAfterFaint = function(this, length, target, source, effect)
-      if effect and effect.effectType ~= 'Move' then return end
-      if source.abilityState.battleBondTriggered then return end
-      if source.species.id == 'greninjabond' and source.hp and not source.transformed and source.side.foePokemonLeft() then
-        this.boost({atk = 1, spa = 1, spe = 1}, source, source, this.effect)
-        this.add('-activate', source, 'ability = Battle Bond')
-        source.abilityState.battleBondTriggered = true
-      end
-    end,
-    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
-    name = "Battle Bond",
-    rating = 3.5,
-    num = 210,
-  },
-  beadsofruin = {
-    onStart = function(this, pokemon)
-      if this.suppressingAbility(pokemon) then return end
-      this.add('-ability', pokemon, 'Beads of Ruin')
-    end,
-    onAnyModifySpD = function(this, spd, target, source, move)
-      local abilityHolder = this.effectState.target
-      if target.hasAbility('Beads of Ruin') then return end
-      if move.ruinedSpd and not move.ruinedSpD.hasAbility('Beads of Ruin') or false then move.ruinedSpD = abilityHolder end
-      if move.ruinedSpD ~= abilityHolder then return end
-      this.debug('Beads of Ruin SpD drop')
-      return this.chainModify(0.75)
-    end,
-    flags = {},
-    name = "Beads of Ruin",
-    rating = 4.5,
-    num = 284,
-  },
-}
---[[
+			local armorTailHolder = this.effectState.target
+			if (source.isAlly(armorTailHolder) or move.target == "all") and move.priority > 0.1 then
+				this.attrLastMove("[still]")
+				this.add("cant", armorTailHolder, "ability = Armor Tail", move, "[of] " + target)
+				return false
+			end
+		end,
+		flags = { breakable = 1 },
+		name = "Armor Tail",
+		rating = 2.5,
+		num = 296,
+	},
+	aromaveil = {
+		onAllyTryAddVolatile = function(this, status, target, source, effect)
+			if table.contains({ "attract", "disable", "encore", "healblock", "taunt", "torment" }, status.id) then
+				if effect.effectType == "Move" then
+					local effectHolder = this.effectState.target
+					this.add("-block", target, "ability = Aroma Veil", "[of] " + effectHolder)
+				end
+				return nil
+			end
+		end,
+		flags = { breakable = 1 },
+		name = "Aroma Veil",
+		rating = 2,
+		num = 165,
+	},
+	asoneglastrier = {
+		onPreStart = function(this, pokemon)
+			this.add("-ability", pokemon, "As One")
+			this.add("-ability", pokemon, "Unnerve")
+			this.effectState.unnerved = true
+		end,
+		onEnd = function(this)
+			this.effectState.unnerved = false
+		end,
+		onFoeTryEatItem = function(this)
+			return not this.effectState.unnerved
+		end,
+		onSourceAfterFaint = function(this, length, target, source, effect)
+			if effect and effect.effectType == "Move" then
+				this.boost({ atk = length }, source, source, this.dex.abilities.get("chillingneigh"))
+			end
+		end,
+		flags = { failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1 },
+		name = "As One (Glastrier)",
+		rating = 3.5,
+		num = 266,
+	},
+	asonespectrier = {
+		onPreStart = function(this, pokemon)
+			this.add("-ability", pokemon, "As One")
+			this.add("-ability", pokemon, "Unnerve")
+			this.effectState.unnerved = true
+		end,
+		onEnd = function(this)
+			this.effectState.unnerved = false
+		end,
+		onFoeTryEatItem = function(this)
+			return not this.effectState.unnerved
+		end,
+		onSourceAfterFaint = function(this, length, target, source, effect)
+			if effect and effect.effectType == "Move" then
+				this.boost({ spa = length }, source, source, this.dex.abilities.get("grimneigh"))
+			end
+		end,
+		flags = { failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1 },
+		name = "As One (Spectrier)",
+		rating = 3.5,
+		num = 267,
+	},
+	aurabreak = {
+		onStart = function(this, pokemon)
+			if this.suppressingAbility(pokemon) then
+				return
+			end
+			this.add("-ability", pokemon, "Aura Break")
+		end,
+		onAnyTryPrimaryHit = function(this, target, source, move)
+			if target == source or move.category == "Status" then
+				return
+			end
+			move.hasAuraBreak = true
+		end,
+		flags = { breakable = 1 },
+		name = "Aura Break",
+		rating = 1,
+		num = 188,
+	},
+	baddreams = {
+		onResidualOrder = 28,
+		onResidualSubOrder = 2,
+		onResidual = function(this, pokemon)
+			if not pokemon.hp then
+				return
+			end
+			for target in pokemon.foes() do
+				if target.status == "slp" or target.hasAbility("comatose") then
+					this.damage(target.baseMaxhp / 8, target, pokemon)
+				end
+			end
+		end,
+		flags = {},
+		name = "Bad Dreams",
+		rating = 1.5,
+		num = 123,
+	},
+	ballfetch = {
+		flags = {},
+		name = "Ball Fetch",
+		rating = 0,
+		num = 237,
+	},
+	battery = {
+		onAllyBasePowerPriority = 22,
+		onAllyBasePower = function(this, basePower, attacker, defender, move)
+			if attacker ~= this.effectState.target and move.category == "Special" then
+				this.debug("Battery boost")
+				return this.chainModify({ 5325, 4096 })
+			end
+		end,
+		flags = {},
+		name = "Battery",
+		rating = 0,
+		num = 217,
+	},
+	battlearmor = {
+		onCriticalHit = false,
+		flags = { breakable = 1 },
+		name = "Battle Armor",
+		rating = 1,
+		num = 4,
+	},
+	battlebond = {
+		onSourceAfterFaint = function(this, length, target, source, effect)
+			if effect and effect.effectType ~= "Move" then
+				return
+			end
+			if source.abilityState.battleBondTriggered then
+				return
+			end
+			if
+				source.species.id == "greninjabond"
+				and source.hp
+				and not source.transformed
+				and source.side.foePokemonLeft()
+			then
+				this.boost({ atk = 1, spa = 1, spe = 1 }, source, source, this.effect)
+				this.add("-activate", source, "ability = Battle Bond")
+				source.abilityState.battleBondTriggered = true
+			end
+		end,
+		flags = { failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1 },
+		name = "Battle Bond",
+		rating = 3.5,
+		num = 210,
+	},
+	beadsofruin = {
+		onStart = function(this, pokemon)
+			if this.suppressingAbility(pokemon) then
+				return
+			end
+			this.add("-ability", pokemon, "Beads of Ruin")
+		end,
+		onAnyModifySpD = function(this, spd, target, source, move)
+			local abilityHolder = this.effectState.target
+			if target.hasAbility("Beads of Ruin") then
+				return
+			end
+			if move.ruinedSpd and not move.ruinedSpD.hasAbility("Beads of Ruin") or false then
+				move.ruinedSpD = abilityHolder
+			end
+			if move.ruinedSpD ~= abilityHolder then
+				return
+			end
+			this.debug("Beads of Ruin SpD drop")
+			return this.chainModify(0.75)
+		end,
+		flags = {},
+		name = "Beads of Ruin",
+		rating = 4.5,
+		num = 284,
+	},
+} --[[
   beastboost = {
     onSourceAfterFaint = function(length, target, source, effect)
       if (effect and effect.effectType == 'Move') {
@@ -1462,7 +1525,8 @@ local Abilities = {
           if (bp == 1) bp = 80;
           if (not bp and move.category ~= 'Status') bp = 80;
           if (bp > warnBp) {
-            warnMoves = [[move, target]];
+            warnMoves = [[move, target]]
+--[[
 warnBp = bp;
 } else if (bp == warnBp) {
 warnMoves.push([move, target]);
@@ -5646,3 +5710,5 @@ rating = 2,
 	},
 };
 --]]
+
+return { Abilities = Abilities }
