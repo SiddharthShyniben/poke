@@ -32,6 +32,10 @@ Ratings and how they work:
 
 --]]
 
+-- FIXME this references
+
+require 'data/util'
+
 local Abilities = {
 	noability = {
 		isNonstandard = "Past",
@@ -41,2016 +45,2018 @@ local Abilities = {
 		num = 0,
 	},
 	adaptability = {
-		onModifySTAB = function(stab, source, target, move)
-			if move.forceSTAB || source.hasType(move.type) then {
-				if stab === 2 then {
-					return 2.25;
-				}
-				return 2;
-			}
-		},
-		flags = {},
-		name = "Adaptability",
-		rating = 4,
-		num = 91,
-	},
-	aerilate = {
-		onModifyTypePriority = -1,
-		onModifyType = function(move, pokemon)
-			const noModifyType = [
-				'judgment', 'multiattack', 'naturalgift', 'revelationdance', 'technoblast', 'terrainpulse', 'weatherball',
-			];
-			if (move.type === 'Normal' && !noModifyType.includes(move.id) &&
-				!(move.isZ && move.category !== 'Status') && !(move.name === 'Tera Blast' && pokemon.terastallized)) {
-				move.type = 'Flying';
-				move.typeChangerBoosted = this.effect;
-			}
-		},
-		onBasePowerPriority = 23,
-		onBasePower = function(basePower, pokemon, target, move)
-			if (move.typeChangerBoosted === this.effect) return this.chainModify([4915, 4096]);
-		},
-		flags = {},
-		name = "Aerilate",
-		rating = 4,
-		num = 184,
-	},
-	aftermath = {
-		onDamagingHitOrder = 1,
-		onDamagingHit = function(damage, target, source, move)
-			if (!target.hp && this.checkMoveMakesContact(move, source, target, true)) {
-				this.damage(source.baseMaxhp / 4, source, target);
-			}
-		},
-		flags = {},
-		name = "Aftermath",
-		rating = 2,
-		num = 106,
-	},
-	airlock = {
-		onSwitchIn = function(pokemon)
-			this.effectState.switchingIn = true;
-		},
-		onStart = function(pokemon)
-			-- Air Lock does not activate when Skill Swapped or when Neutralizing Gas leaves the field
-			pokemon.abilityState.ending = false; -- Clear the ending flag
-			if this.effectState.switchingIn then {
-				this.add('-ability', pokemon, 'Air Lock');
-				this.effectState.switchingIn = false;
-			}
-			this.eachEvent('WeatherChange', this.effect);
-		},
-		onEnd = function(pokemon)
-			pokemon.abilityState.ending = true;
-			this.eachEvent('WeatherChange', this.effect);
-		},
-		suppressWeather = true,
-		flags = {},
-		name = "Air Lock",
-		rating = 1.5,
-		num = 76,
-	},
-	analytic = {
-		onBasePowerPriority = 21,
-		onBasePower = function(basePower, pokemon)
-			let boosted = true;
-			for (const target of this.getAllActive()) {
-				if (target === pokemon) continue;
-				if this.queue.willMove(target) then {
-					boosted = false;
-					break;
-				}
-			}
-			if boosted then {
-				this.debug('Analytic boost');
-				return this.chainModify([5325, 4096]);
-			}
-		},
-		flags = {},
-		name = "Analytic",
-		rating = 2.5,
-		num = 148,
-	},
-	angerpoint = {
-		onHit = function(target, source, move)
-			if (!target.hp) return;
-			if (move?.effectType === 'Move' && target.getMoveHitData(move).crit) {
-				this.boost({atk = 12}, target, target);
-			}
-		},
-		flags = {},
-		name = "Anger Point",
-		rating = 1,
-		num = 83,
-	},
-	angershell = {
-		onDamage = function(damage, target, source, effect)
-			if (
-				effect.effectType === "Move" &&
-				!effect.multihit &&
-				(!effect.negateSecondary && !(effect.hasSheerForce && source.hasAbility('sheerforce')))
-			) {
-				this.effectState.checkedAngerShell = false;
-			} else {
-				this.effectState.checkedAngerShell = true;
-			}
-		},
-		onTryEatItem = function(item)
-			const healingItems = [
-				'aguavberry', 'enigmaberry', 'figyberry', 'iapapaberry', 'magoberry', 'sitrusberry', 'wikiberry', 'oranberry', 'berryjuice',
-			];
-			if healingItems.includes(item.id) then {
-				return this.effectState.checkedAngerShell;
-			}
-			return true;
-		},
-		onAfterMoveSecondary = function(target, source, move)
-			this.effectState.checkedAngerShell = true;
-			if (!source || source === target || !target.hp || !move.totalDamage) return;
-			const lastAttackedBy = target.getLastAttackedBy();
-			if (!lastAttackedBy) return;
-			const damage = move.multihit ? move.totalDamage  = lastAttackedBy.damage;
-			if (target.hp <= target.maxhp / 2 && target.hp + damage > target.maxhp / 2) {
-				this.boost({atk = 1, spa = 1, spe = 1, def = -1, spd = -1}, target, target);
-			}
-		},
-		flags = {},
-		name = "Anger Shell",
-		rating = 3,
-		num = 271,
-	},
-	anticipation = {
-		onStart = function(pokemon)
-			for (const target of pokemon.foes()) {
-				for (const moveSlot of target.moveSlots) {
-					const move = this.dex.moves.get(moveSlot.move);
-					if (move.category === 'Status') continue;
-					const moveType = move.id === 'hiddenpower' ? target.hpType  = move.type;
-					if (
-						this.dex.getImmunity(moveType, pokemon) && this.dex.getEffectiveness(moveType, pokemon) > 0 ||
-						move.ohko
-					) {
-						this.add('-ability', pokemon, 'Anticipation');
-						return;
-					}
-				}
-			}
-		},
-		flags = {},
-		name = "Anticipation",
-		rating = 0.5,
-		num = 107,
-	},
-	arenatrap = {
-		onFoeTrapPokemon = function(pokemon)
-			if (!pokemon.isAdjacent(this.effectState.target)) return;
-			if pokemon.isGrounded() then {
-				pokemon.tryTrap(true);
-			}
-		},
-		onFoeMaybeTrapPokemon = function(pokemon, source)
-			if (!source) source = this.effectState.target;
-			if (!source || !pokemon.isAdjacent(source)) return;
-			if (pokemon.isGrounded(!pokemon.knownType)) { -- Negate immunity if the type is unknown
-				pokemon.maybeTrapped = true;
-			}
-		},
-		flags = {},
-		name = "Arena Trap",
-		rating = 5,
-		num = 71,
-	},
-	armortail = {
-		onFoeTryMove = function(target, source, move)
-			const targetAllExceptions = ['perishsong', 'flowershield', 'rototiller'];
-			if (move.target === 'foeSide' || (move.target === 'all' && !targetAllExceptions.includes(move.id))) {
-				return;
-			}
+		onModifySTAB = function(_this, stab, source, _target, move)
+      if move.forceSTAB or source.hasType(move.type) then
+        if stab == 2 then
+          return 2.25
+        end
+        return 2
+      end
+    end,
+    flags = {},
+    name = "Adaptability",
+    rating = 4,
+    num = 91,
+  },
+  aerilate = {
+    onModifyTypePriority = -1,
+    onBasePowerPriority = 23,
+    onModifyType = function(this, move, pokemon)
+      local noModifyType = {
+        'judgment', 'multiattack', 'naturalgift', 'revelationdance', 'technoblast', 'terrainpulse', 'weatherball',
+      }
 
-			const armorTailHolder = this.effectState.target;
-			if ((source.isAlly(armorTailHolder) || move.target === 'all') && move.priority > 0.1) {
-				this.attrLastMove('[still]');
-				this.add('cant', armorTailHolder, 'ability = Armor Tail', move, '[of] ' + target);
-				return false;
-			}
-		},
-		flags = {breakable = 1},
-		name = "Armor Tail",
-		rating = 2.5,
-		num = 296,
-	},
-	aromaveil = {
-		onAllyTryAddVolatile = function(status, target, source, effect)
-			if (['attract', 'disable', 'encore', 'healblock', 'taunt', 'torment'].includes(status.id)) {
-				if (effect.effectType === 'Move') {
-					const effectHolder = this.effectState.target;
-					this.add('-block', target, 'ability = Aroma Veil', '[of] ' + effectHolder);
-				}
-				return null;
-			}
-		},
-		flags = {breakable = 1},
-		name = "Aroma Veil",
-		rating = 2,
-		num = 165,
-	},
-	asoneglastrier = {
-		onPreStart = function(pokemon)
-			this.add('-ability', pokemon, 'As One');
-			this.add('-ability', pokemon, 'Unnerve');
-			this.effectState.unnerved = true;
-		},
-		onEnd = function()
-			this.effectState.unnerved = false;
-		},
-		onFoeTryEatItem = function()
-			return !this.effectState.unnerved;
-		},
-		onSourceAfterFaint = function(length, target, source, effect)
-			if (effect && effect.effectType === 'Move') {
-				this.boost({atk = length}, source, source, this.dex.abilities.get('chillingneigh'));
-			}
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
-		name = "As One (Glastrier)",
-		rating = 3.5,
-		num = 266,
-	},
-	asonespectrier = {
-		onPreStart = function(pokemon)
-			this.add('-ability', pokemon, 'As One');
-			this.add('-ability', pokemon, 'Unnerve');
-			this.effectState.unnerved = true;
-		},
-		onEnd = function()
-			this.effectState.unnerved = false;
-		},
-		onFoeTryEatItem = function()
-			return !this.effectState.unnerved;
-		},
-		onSourceAfterFaint = function(length, target, source, effect)
-			if (effect && effect.effectType === 'Move') {
-				this.boost({spa = length}, source, source, this.dex.abilities.get('grimneigh'));
-			}
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
-		name = "As One (Spectrier)",
-		rating = 3.5,
-		num = 267,
-	},
-	aurabreak = {
-		onStart = function(pokemon)
-			if (this.suppressingAbility(pokemon)) return;
-			this.add('-ability', pokemon, 'Aura Break');
-		},
-		onAnyTryPrimaryHit = function(target, source, move)
-			if (target === source || move.category === 'Status') return;
-			move.hasAuraBreak = true;
-		},
-		flags = {breakable = 1},
-		name = "Aura Break",
-		rating = 1,
-		num = 188,
-	},
-	baddreams = {
-		onResidualOrder = 28,
-		onResidualSubOrder = 2,
-		onResidual = function(pokemon)
-			if (!pokemon.hp) return;
-			for (const target of pokemon.foes()) {
-				if (target.status === 'slp' || target.hasAbility('comatose')) {
-					this.damage(target.baseMaxhp / 8, target, pokemon);
-				}
-			}
-		},
-		flags = {},
-		name = "Bad Dreams",
-		rating = 1.5,
-		num = 123,
-	},
-	ballfetch = {
-		flags = {},
-		name = "Ball Fetch",
-		rating = 0,
-		num = 237,
-	},
-	battery = {
-		onAllyBasePowerPriority = 22,
-		onAllyBasePower = function(basePower, attacker, defender, move)
-			if (attacker !== this.effectState.target && move.category === 'Special') {
-				this.debug('Battery boost');
-				return this.chainModify([5325, 4096]);
-			}
-		},
-		flags = {},
-		name = "Battery",
-		rating = 0,
-		num = 217,
-	},
-	battlearmor = {
-		onCriticalHit = false,
-		flags = {breakable = 1},
-		name = "Battle Armor",
-		rating = 1,
-		num = 4,
-	},
-	battlebond = {
-		onSourceAfterFaint = function(length, target, source, effect)
-			if (effect?.effectType !== 'Move') return;
-			if (source.abilityState.battleBondTriggered) return;
-			if (source.species.id === 'greninjabond' && source.hp && !source.transformed && source.side.foePokemonLeft()) {
-				this.boost({atk = 1, spa = 1, spe = 1}, source, source, this.effect);
-				this.add('-activate', source, 'ability = Battle Bond');
-				source.abilityState.battleBondTriggered = true;
-			}
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
-		name = "Battle Bond",
-		rating = 3.5,
-		num = 210,
-	},
-	beadsofruin = {
-		onStart = function(pokemon)
-			if (this.suppressingAbility(pokemon)) return;
-			this.add('-ability', pokemon, 'Beads of Ruin');
-		},
-		onAnyModifySpD = function(spd, target, source, move)
-			const abilityHolder = this.effectState.target;
-			if (target.hasAbility('Beads of Ruin')) return;
-			if (!move.ruinedSpD?.hasAbility('Beads of Ruin')) move.ruinedSpD = abilityHolder;
-			if (move.ruinedSpD !== abilityHolder) return;
-			this.debug('Beads of Ruin SpD drop');
-			return this.chainModify(0.75);
-		},
-		flags = {},
-		name = "Beads of Ruin",
-		rating = 4.5,
-		num = 284,
-	},
-	beastboost = {
-		onSourceAfterFaint = function(length, target, source, effect)
-			if (effect && effect.effectType === 'Move') {
-				const bestStat = source.getBestStat(true, true);
-				this.boost({[bestStat] = length}, source);
-			}
-		},
-		flags = {},
-		name = "Beast Boost",
-		rating = 3.5,
-		num = 224,
-	},
-	berserk = {
-		onDamage = function(damage, target, source, effect)
-			if (
-				effect.effectType === "Move" &&
-				!effect.multihit &&
-				(!effect.negateSecondary && !(effect.hasSheerForce && source.hasAbility('sheerforce')))
-			) {
-				this.effectState.checkedBerserk = false;
-			} else {
-				this.effectState.checkedBerserk = true;
-			}
-		},
-		onTryEatItem = function(item)
-			const healingItems = [
-				'aguavberry', 'enigmaberry', 'figyberry', 'iapapaberry', 'magoberry', 'sitrusberry', 'wikiberry', 'oranberry', 'berryjuice',
-			];
-			if (healingItems.includes(item.id)) {
-				return this.effectState.checkedBerserk;
-			}
-			return true;
-		},
-		onAfterMoveSecondary = function(target, source, move)
-			this.effectState.checkedBerserk = true;
-			if (!source || source === target || !target.hp || !move.totalDamage) return;
-			const lastAttackedBy = target.getLastAttackedBy();
-			if (!lastAttackedBy) return;
-			const damage = move.multihit && !move.smartTarget ? move.totalDamage  = lastAttackedBy.damage;
-			if (target.hp <= target.maxhp / 2 && target.hp + damage > target.maxhp / 2) {
-				this.boost({spa = 1}, target, target);
-			}
-		},
-		flags = {},
-		name = "Berserk",
-		rating = 2,
-		num = 201,
-	},
-	bigpecks = {
-		onTryBoost = function(boost, target, source, effect)
-			if (source && target === source) return;
-			if (boost.def && boost.def < 0) {
-				delete boost.def;
-				if (!(effect as ActiveMove).secondaries && effect.id !== 'octolock') {
-					this.add("-fail", target, "unboost", "Defense", "[from] ability = Big Pecks", "[of] " + target);
-				}
-			}
-		},
-		flags = {breakable = 1},
-		name = "Big Pecks",
-		rating = 0.5,
-		num = 145,
-	},
-	blaze = {
-		onModifyAtkPriority = 5,
-		onModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Fire' && attacker.hp <= attacker.maxhp / 3) {
-				this.debug('Blaze boost');
-				return this.chainModify(1.5);
-			}
-		},
-		onModifySpAPriority = 5,
-		onModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Fire' && attacker.hp <= attacker.maxhp / 3) {
-				this.debug('Blaze boost');
-				return this.chainModify(1.5);
-			}
-		},
-		flags = {},
-		name = "Blaze",
-		rating = 2,
-		num = 66,
-	},
-	bulletproof = {
-		onTryHit = function(pokemon, target, move)
-			if (move.flags['bullet']) {
-				this.add('-immune', pokemon, '[from] ability = Bulletproof');
-				return null;
-			}
-		},
-		flags = {breakable = 1},
-		name = "Bulletproof",
-		rating = 3,
-		num = 171,
-	},
-	cheekpouch = {
-		onEatItem = function(item, pokemon)
-			this.heal(pokemon.baseMaxhp / 3);
-		},
-		flags = {},
-		name = "Cheek Pouch",
-		rating = 2,
-		num = 167,
-	},
-	chillingneigh = {
-		onSourceAfterFaint = function(length, target, source, effect)
-			if (effect && effect.effectType === 'Move') {
-				this.boost({atk = length}, source);
-			}
-		},
-		flags = {},
-		name = "Chilling Neigh",
-		rating = 3,
-		num = 264,
-	},
-	chlorophyll = {
-		onModifySpe = function(spe, pokemon)
-			if (['sunnyday', 'desolateland'].includes(pokemon.effectiveWeather())) {
-				return this.chainModify(2);
-			}
-		},
-		flags = {},
-		name = "Chlorophyll",
-		rating = 3,
-		num = 34,
-	},
-	clearbody = {
-		onTryBoost = function(boost, target, source, effect)
-			if (source && target === source) return;
-			let showMsg = false;
-			let i = BoostID;
-			for (i in boost) {
-				if (boost[i]! < 0) {
-					delete boost[i];
-					showMsg = true;
-				}
-			}
-			if (showMsg && !(effect as ActiveMove).secondaries && effect.id !== 'octolock') {
-				this.add("-fail", target, "unboost", "[from] ability = Clear Body", "[of] " + target);
-			}
-		},
-		flags = {breakable = 1},
-		name = "Clear Body",
-		rating = 2,
-		num = 29,
-	},
-	cloudnine = {
-		onSwitchIn = function(pokemon)
-			this.effectState.switchingIn = true;
-		},
-		onStart = function(pokemon)
-			-- Cloud Nine does not activate when Skill Swapped or when Neutralizing Gas leaves the field
-			pokemon.abilityState.ending = false; -- Clear the ending flag
-			if (this.effectState.switchingIn) {
-				this.add('-ability', pokemon, 'Cloud Nine');
-				this.effectState.switchingIn = false;
-			}
-			this.eachEvent('WeatherChange', this.effect);
-		},
-		onEnd = function(pokemon)
-			pokemon.abilityState.ending = true;
-			this.eachEvent('WeatherChange', this.effect);
-		},
-		suppressWeather = true,
-		flags = {},
-		name = "Cloud Nine",
-		rating = 1.5,
-		num = 13,
-	},
-	colorchange = {
-		onAfterMoveSecondary = function(target, source, move)
-			if (!target.hp) return;
-			const type = move.type;
-			if (
-				target.isActive && move.effectType === 'Move' && move.category !== 'Status' &&
-				type !== '???' && !target.hasType(type)
-			) {
-				if (!target.setType(type)) return false;
-				this.add('-start', target, 'typechange', type, '[from] ability = Color Change');
+      if (move.type == 'Normal'
+        and not table.contains(noModifyType, move.id)
+        and not (move.isZ and move.category ~= 'Status')
+        and not (move.name == 'Tera Blast' and pokemon.terastallized)) then
+        move.type = 'Flying'
+        move.typeChangerBoosted = this.effect
+      end
+    end,
+    onBasePower = function(this, _basePower, _pokemon, target, move)
+      if move.typeChangerBoosted == this.effect then return this.chainModify({4915, 4096}) end
+    end,
+    flags = {},
+    name = "Aerilate",
+    rating = 4,
+    num = 184,
+  },
+  aftermath = {
+    onDamagingHitOrder = 1,
+    onDamagingHit = function(this, _damage, target, source, move)
+      if not target.hp and this.checkMoveMakesContact(move, source, target, true) then
+        this.damage(source.baseMaxhp / 4, source, target)
+      end
+    end,
+    flags = {},
+    name = "Aftermath",
+    rating = 2,
+    num = 106,
+  },
+  airlock = {
+    onSwitchIn = function(this, _pokemon)
+      this.effectState.switchingIn = true
+    end,
+    onStart = function(this, pokemon)
+      -- Air Lock does not activate when Skill Swapped or when Neutralizing Gas leaves the field
+      pokemon.abilityState.ending = false -- Clear the ending flag
+      if this.effectState.switchingIn then
+        this.add('-ability', pokemon, 'Air Lock')
+        this.effectState.switchingIn = false
+      end
+      this.eachEvent('WeatherChange', this.effect)
+    end,
+    onEnd = function(this, pokemon)
+      pokemon.abilityState.ending = true
+      this.eachEvent('WeatherChange', this.effect)
+    end,
+    suppressWeather = true,
+    flags = {},
+    name = "Air Lock",
+    rating = 1.5,
+    num = 76,
+  },
+  analytic = {
+    onBasePowerPriority = 21,
+    onBasePower = function(this, _basePower, pokemon)
+      local boosted = true
+      for target in this.getAllActive() do
+        if (target == pokemon) then goto continue end
+        if this.queue.willMove(target) then
+          boosted = false
+          break
+      end
+        ::continue::
+      end
+      if boosted then
+        this.debug('Analytic boost')
+        return this.chainModify({5325, 4096})
+      end
+    end,
+    flags = {},
+    name = "Analytic",
+    rating = 2.5,
+    num = 148,
+  },
+  angerpoint = {
+    onHit = function(this, target, _source, move)
+      if (not target.hp) then return end
+      if (move and move.effectType == 'Move') and target.getMoveHitData(move).crit then
+        this.boost({atk = 12}, target, target)
+      end
+    end,
+    flags = {},
+    name = "Anger Point",
+    rating = 1,
+    num = 83,
+  },
+  angershell = {
+    onDamage = function(this, damage, target, source, effect)
+      if
+        effect.effectType == "Move" and
+        not effect.multihit and
+        (not effect.negateSecondary and not (effect.hasSheerForce and source.hasAbility('sheerforce')))
+      then
+        this.effectState.checkedAngerShell = false
+      else
+        this.effectState.checkedAngerShell = true
+      end
+    end,
+    onTryEatItem = function(this, item)
+      local healingItems = {
+        'aguavberry', 'enigmaberry', 'figyberry', 'iapapaberry', 'magoberry', 'sitrusberry', 'wikiberry', 'oranberry', 'berryjuice',
+      }
+      if table.contains(healingItems, item.id) then 
+        return this.effectState.checkedAngerShell
+      end
+      return true end,
+    onAfterMoveSecondary = function(this, target, source, move)
+      this.effectState.checkedAngerShell = true
+      if (not source or source == target or not target.hp or not move.totalDamage) then return end
+      local lastAttackedBy = target.getLastAttackedBy()
+      if (not lastAttackedBy) then return end
+      local damage = move.multihit and move.totalDamage or lastAttackedBy.damage
+      if target.hp <= target.maxhp / 2 and target.hp + damage > target.maxhp / 2 then
+        this.boost({atk = 1, spa = 1, spe = 1, def = -1, spd = -1}, target, target)
+      end
+    end,
+    flags = {},
+    name = "Anger Shell",
+    rating = 3,
+    num = 271,
+  },
+  anticipation = {
+    onStart = function(this, pokemon)
+      for target in pokemon.foes() do
+        for moveSlot in target.moveSlots do
+          local move = this.dex.moves.get(moveSlot.move)
+          if (move.category == 'Status') then goto continue end
+          local moveType = move.id == 'hiddenpower' and target.hpType or move.type
+          if this.dex.getImmunity(moveType, pokemon) and this.dex.getEffectiveness(moveType, pokemon) > 0 or move.ohko then
+            this.add('-ability', pokemon, 'Anticipation')
+            return
+          end
+          ::continue::
+        end
+      end
+    end,
+    flags = {},
+    name = "Anticipation",
+    rating = 0.5,
+    num = 107,
+  },
+  arenatrap = {
+    onFoeTrapPokemon = function(this, pokemon)
+      if not pokemon.isAdjacent(this.effectState.target) then return end
+      if pokemon.isGrounded() then
+        pokemon.tryTrap(true)
+      end
+    end,
+    onFoeMaybeTrapPokemon = function(this, pokemon, source)
+      if not source then source = this.effectState.target end
+      if not source or not pokemon.isAdjacent(source) then return end
+      if pokemon.isGrounded(not pokemon.knownType) then -- Negate immunity if the type is unknown
+        pokemon.maybeTrapped = true
+      end
+    end,
+    flags = {},
+    name = "Arena Trap",
+    rating = 5,
+    num = 71,
+  },
+  armortail = {
+    onFoeTryMove = function(this, target, source, move)
+      local targetAllExceptions = {'perishsong', 'flowershield', 'rototiller'}
+      if move.target == 'foeSide' or (move.target == 'all' and not targetAllExceptions.includes(move.id)) then
+        return
+    end
 
-				if (target.side.active.length === 2 && target.position === 1) {
-					-- Curse Glitch
-					const action = this.queue.willMove(target);
-					if (action && action.move.id === 'curse') {
-						action.targetLoc = -1;
-					}
-				}
-			}
-		},
-		flags = {},
-		name = "Color Change",
-		rating = 0,
-		num = 16,
-	},
-	comatose = {
-		onStart = function(pokemon)
-			this.add('-ability', pokemon, 'Comatose');
-		},
-		onSetStatus = function(status, target, source, effect)
-			if ((effect as Move)?.status) {
-				this.add('-immune', target, '[from] ability = Comatose');
-			}
-			return false;
-		},
-		-- Permanent sleep "status" implemented in the relevant sleep-checking effects
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
-		name = "Comatose",
-		rating = 4,
-		num = 213,
-	},
-	commander = {
-		onUpdate = function(pokemon)
-			if (this.gameType !== 'doubles') return;
-			const ally = pokemon.allies()[0];
-			if (!ally || pokemon.baseSpecies.baseSpecies !== 'Tatsugiri' || ally.baseSpecies.baseSpecies !== 'Dondozo') {
-				-- Handle any edge cases
-				if (pokemon.getVolatile('commanding')) pokemon.removeVolatile('commanding');
-				return;
-			}
+      local armorTailHolder = this.effectState.target
+      if (source.isAlly(armorTailHolder) or move.target == 'all') and move.priority > 0.1 then this.attrLastMove('[still]')
+        this.add('cant', armorTailHolder, 'ability = Armor Tail', move, '[of] ' + target)
+        return false
+      end
+    end,
+    flags = {breakable = 1},
+    name = "Armor Tail",
+    rating = 2.5,
+    num = 296,
+  },
+  aromaveil = {
+    onAllyTryAddVolatile = function(this, status, target, source, effect)
+      if ({'attract', 'disable', 'encore', 'healblock', 'taunt', 'torment'}).includes(status.id) then
+        if effect.effectType == 'Move' then
+          local effectHolder = this.effectState.target
+          this.add('-block', target, 'ability = Aroma Veil', '[of] ' + effectHolder)
+        end
+        return nil
+      end
+    end,
+    flags = {breakable = 1},
+    name = "Aroma Veil",
+    rating = 2,
+    num = 165,
+  },
+  asoneglastrier = {
+    onPreStart = function(this, pokemon)
+      this.add('-ability', pokemon, 'As One')
+      this.add('-ability', pokemon, 'Unnerve')
+      this.effectState.unnerved = true
+    end,
+    onEnd = function(this)
+      this.effectState.unnerved = false
+    end,
+    onFoeTryEatItem = function(this)
+      return not this.effectState.unnerved
+    end,
+    onSourceAfterFaint = function(this, length, target, source, effect)
+      if effect and effect.effectType == 'Move' then
+        this.boost({atk = length}, source, source, this.dex.abilities.get('chillingneigh'))
+      end
+    end,
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
+    name = "As One (Glastrier)",
+    rating = 3.5,
+    num = 266,
+  },
+  asonespectrier = {
+    onPreStart = function(this, pokemon)
+      this.add('-ability', pokemon, 'As One')
+      this.add('-ability', pokemon, 'Unnerve')
+      this.effectState.unnerved = true
+    end,
+    onEnd = function(this)
+      this.effectState.unnerved = false
+    end,
+    onFoeTryEatItem = function(this)
+      return not this.effectState.unnerved
+    end,
+    onSourceAfterFaint = function(this, length, target, source, effect)
+      if (effect and effect.effectType == 'Move') then
+        this.boost({spa = length}, source, source, this.dex.abilities.get('grimneigh'))
+      end
+    end,
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
+    name = "As One (Spectrier)",
+    rating = 3.5,
+    num = 267,
+  },
+  aurabreak = {
+    onStart = function(this, pokemon)
+      if this.suppressingAbility(pokemon) then return end
+      this.add('-ability', pokemon, 'Aura Break')
+    end,
+    onAnyTryPrimaryHit = function(this, target, source, move)
+      if (target == source or move.category == 'Status') then return end
+      move.hasAuraBreak = true
+    end,
+    flags = {breakable = 1},
+    name = "Aura Break",
+    rating = 1,
+    num = 188,
+  },
+  baddreams = {
+    onResidualOrder = 28,
+    onResidualSubOrder = 2,
+    onResidual = function(this, pokemon)
+      if not pokemon.hp then return end
+      for target in pokemon.foes() do
+        if target.status == 'slp' or target.hasAbility('comatose') then
+          this.damage(target.baseMaxhp / 8, target, pokemon)
+        end
+      end
+    end,
+    flags = {},
+    name = "Bad Dreams",
+    rating = 1.5,
+    num = 123,
+  },
+  ballfetch = {
+    flags = {},
+    name = "Ball Fetch",
+    rating = 0,
+    num = 237,
+  },
+  battery = {
+    onAllyBasePowerPriority = 22,
+    onAllyBasePower = function(this, basePower, attacker, defender, move)
+      if attacker ~= this.effectState.target and move.category == 'Special' then
+        this.debug('Battery boost')
+        return this.chainModify({5325, 4096})
+      end
+    end,
+    flags = {},
+    name = "Battery",
+    rating = 0,
+    num = 217,
+  },
+  battlearmor = {
+    onCriticalHit = false,
+    flags = {breakable = 1},
+    name = "Battle Armor",
+    rating = 1,
+    num = 4,
+  },
+  battlebond = {
+    onSourceAfterFaint = function(this, length, target, source, effect)
+      if effect and effect.effectType ~= 'Move' then return end
+      if source.abilityState.battleBondTriggered then return end
+      if source.species.id == 'greninjabond' and source.hp and not source.transformed and source.side.foePokemonLeft() then
+        this.boost({atk = 1, spa = 1, spe = 1}, source, source, this.effect)
+        this.add('-activate', source, 'ability = Battle Bond')
+        source.abilityState.battleBondTriggered = true
+      end
+    end,
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
+    name = "Battle Bond",
+    rating = 3.5,
+    num = 210,
+  },
+  beadsofruin = {
+    onStart = function(this, pokemon)
+      if this.suppressingAbility(pokemon) then return end
+      this.add('-ability', pokemon, 'Beads of Ruin')
+    end,
+    onAnyModifySpD = function(this, spd, target, source, move)
+      local abilityHolder = this.effectState.target
+      if target.hasAbility('Beads of Ruin') then return end
+      if move.ruinedSpd and not move.ruinedSpD.hasAbility('Beads of Ruin') or false then move.ruinedSpD = abilityHolder end
+      if move.ruinedSpD ~= abilityHolder then return end
+      this.debug('Beads of Ruin SpD drop')
+      return this.chainModify(0.75)
+    end,
+    flags = {},
+    name = "Beads of Ruin",
+    rating = 4.5,
+    num = 284,
+  },
+}
+--[[
+  beastboost = {
+    onSourceAfterFaint = function(length, target, source, effect)
+      if (effect and effect.effectType == 'Move') {
+        local bestStat = source.getBestStat(true, true);
+        this.boost({[bestStat] = length}, source);
+      }
+    },
+    flags = {},
+    name = "Beast Boost",
+    rating = 3.5,
+    num = 224,
+  },
+  berserk = {
+    onDamage = function(damage, target, source, effect)
+      if (
+        effect.effectType == "Move" and
+        not effect.multihit and
+        (not effect.negateSecondary and not (effect.hasSheerForce and source.hasAbility('sheerforce')))
+      ) {
+        this.effectState.checkedBerserk = false;
+      } else {
+        this.effectState.checkedBerserk = true;
+      }
+    },
+    onTryEatItem = function(item)
+      local healingItems = [
+        'aguavberry', 'enigmaberry', 'figyberry', 'iapapaberry', 'magoberry', 'sitrusberry', 'wikiberry', 'oranberry', 'berryjuice',
+      ];
+      if (healingItems.includes(item.id)) {
+        return this.effectState.checkedBerserk;
+      }
+      return true;
+    },
+    onAfterMoveSecondary = function(target, source, move)
+      this.effectState.checkedBerserk = true;
+      if (not source or source == target or not target.hp or not move.totalDamage) return;
+      local lastAttackedBy = target.getLastAttackedBy();
+      if (not lastAttackedBy) return;
+      local damage = move.multihit and not move.smartTarget ? move.totalDamage  = lastAttackedBy.damage;
+      if (target.hp <= target.maxhp / 2 and target.hp + damage > target.maxhp / 2) {
+        this.boost({spa = 1}, target, target);
+      }
+    },
+    flags = {},
+    name = "Berserk",
+    rating = 2,
+    num = 201,
+  },
+  bigpecks = {
+    onTryBoost = function(boost, target, source, effect)
+      if (source and target == source) return;
+      if (boost.def and boost.def < 0) {
+        delete boost.def;
+        if (not (effect as ActiveMove).secondaries and effect.id ~= 'octolock') {
+          this.add("-fail", target, "unboost", "Defense", "[from] ability = Big Pecks", "[of] " + target);
+        }
+      }
+    },
+    flags = {breakable = 1},
+    name = "Big Pecks",
+    rating = 0.5,
+    num = 145,
+  },
+  blaze = {
+    onModifyAtkPriority = 5,
+    onModifyAtk = function(atk, attacker, defender, move)
+      if (move.type == 'Fire' and attacker.hp <= attacker.maxhp / 3) {
+        this.debug('Blaze boost');
+        return this.chainModify(1.5);
+      }
+    },
+    onModifySpAPriority = 5,
+    onModifySpA = function(atk, attacker, defender, move)
+      if (move.type == 'Fire' and attacker.hp <= attacker.maxhp / 3) {
+        this.debug('Blaze boost');
+        return this.chainModify(1.5);
+      }
+    },
+    flags = {},
+    name = "Blaze",
+    rating = 2,
+    num = 66,
+  },
+  bulletproof = {
+    onTryHit = function(pokemon, target, move)
+      if (move.flags['bullet']) {
+        this.add('-immune', pokemon, '[from] ability = Bulletproof');
+        return null;
+      }
+    },
+    flags = {breakable = 1},
+    name = "Bulletproof",
+    rating = 3,
+    num = 171,
+  },
+  cheekpouch = {
+    onEatItem = function(item, pokemon)
+      this.heal(pokemon.baseMaxhp / 3);
+    },
+    flags = {},
+    name = "Cheek Pouch",
+    rating = 2,
+    num = 167,
+  },
+  chillingneigh = {
+    onSourceAfterFaint = function(length, target, source, effect)
+      if (effect and effect.effectType == 'Move') {
+        this.boost({atk = length}, source);
+      }
+    },
+    flags = {},
+    name = "Chilling Neigh",
+    rating = 3,
+    num = 264,
+  },
+  chlorophyll = {
+    onModifySpe = function(spe, pokemon)
+      if (['sunnyday', 'desolateland'].includes(pokemon.effectiveWeather())) {
+        return this.chainModify(2);
+      }
+    },
+    flags = {},
+    name = "Chlorophyll",
+    rating = 3,
+    num = 34,
+  },
+  clearbody = {
+    onTryBoost = function(boost, target, source, effect)
+      if (source and target == source) return;
+      local showMsg = false;
+      local i = BoostID;
+      for (i in boost) {
+        if (boost[i]not  < 0) {
+          delete boost[i];
+          showMsg = true;
+        }
+      }
+      if (showMsg and not (effect as ActiveMove).secondaries and effect.id ~= 'octolock') {
+        this.add("-fail", target, "unboost", "[from] ability = Clear Body", "[of] " + target);
+      }
+    },
+    flags = {breakable = 1},
+    name = "Clear Body",
+    rating = 2,
+    num = 29,
+  },
+  cloudnine = {
+    onSwitchIn = function(pokemon)
+      this.effectState.switchingIn = true;
+    },
+    onStart = function(pokemon)
+      -- Cloud Nine does not activate when Skill Swapped or when Neutralizing Gas leaves the field
+      pokemon.abilityState.ending = false; -- Clear the ending flag
+      if (this.effectState.switchingIn) {
+        this.add('-ability', pokemon, 'Cloud Nine');
+        this.effectState.switchingIn = false;
+      }
+      this.eachEvent('WeatherChange', this.effect);
+    },
+    onEnd = function(pokemon)
+      pokemon.abilityState.ending = true;
+      this.eachEvent('WeatherChange', this.effect);
+    },
+    suppressWeather = true,
+    flags = {},
+    name = "Cloud Nine",
+    rating = 1.5,
+    num = 13,
+  },
+  colorchange = {
+    onAfterMoveSecondary = function(target, source, move)
+      if (not target.hp) return;
+      local type = move.type;
+      if (
+        target.isActive and move.effectType == 'Move' and move.category ~= 'Status' and
+        type ~= '???' and not target.hasType(type)
+      ) {
+        if (not target.setType(type)) return false;
+        this.add('-start', target, 'typechange', type, '[from] ability = Color Change');
 
-			if (!pokemon.getVolatile('commanding')) {
-				-- If Dondozo already was commanded this fails
-				if (ally.getVolatile('commanded')) return;
-				-- Cancel all actions this turn for pokemon if applicable
-				this.queue.cancelAction(pokemon);
-				-- Add volatiles to both pokemon
-				this.add('-activate', pokemon, 'ability = Commander', '[of] ' + ally);
-				pokemon.addVolatile('commanding');
-				ally.addVolatile('commanded', pokemon);
-				-- Continued in conditions.ts in the volatiles
-			} else {
-				if (!ally.fainted) return;
-				pokemon.removeVolatile('commanding');
-			}
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1},
-		name = "Commander",
-		rating = 0,
-		num = 279,
-	},
-	competitive = {
-		onAfterEachBoost = function(boost, target, source, effect)
-			if (!source || target.isAlly(source)) {
-				return;
-			}
-			let statsLowered = false;
-			let i = BoostID;
-			for (i in boost) {
-				if (boost[i]! < 0) {
-					statsLowered = true;
-				}
-			}
-			if (statsLowered) {
-				this.boost({spa = 2}, target, target, null, false, true);
-			}
-		},
-		flags = {},
-		name = "Competitive",
-		rating = 2.5,
-		num = 172,
-	},
-	compoundeyes = {
-		onSourceModifyAccuracyPriority = -1,
-		onSourceModifyAccuracy = function(accuracy)
-			if (typeof accuracy !== 'number') return;
-			this.debug('compoundeyes - enhancing accuracy');
-			return this.chainModify([5325, 4096]);
-		},
-		flags = {},
-		name = "Compound Eyes",
-		rating = 3,
-		num = 14,
-	},
-	contrary = {
-		onChangeBoost = function(boost, target, source, effect)
-			if (effect && effect.id === 'zpower') return;
-			let i = BoostID;
-			for (i in boost) {
-				boost[i]! *= -1;
-			}
-		},
-		flags = {breakable = 1},
-		name = "Contrary",
-		rating = 4.5,
-		num = 126,
-	},
-	corrosion = {
-		-- Implemented in sim/pokemon.js:Pokemon#setStatus
-		flags = {},
-		name = "Corrosion",
-		rating = 2.5,
-		num = 212,
-	},
-	costar = {
-		onStart = function(pokemon)
-			const ally = pokemon.allies()[0];
-			if (!ally) return;
+        if (target.side.active.length == 2 and target.position == 1) {
+          -- Curse Glitch
+          local action = this.queue.willMove(target);
+          if (action and action.move.id == 'curse') {
+            action.targetLoc = -1;
+          }
+        }
+      }
+    },
+    flags = {},
+    name = "Color Change",
+    rating = 0,
+    num = 16,
+  },
+  comatose = {
+    onStart = function(pokemon)
+      this.add('-ability', pokemon, 'Comatose');
+    },
+    onSetStatus = function(status, target, source, effect)
+      if ((effect as Move)?.status) {
+        this.add('-immune', target, '[from] ability = Comatose');
+      }
+      return false;
+    },
+    -- Permanent sleep "status" implemented in the relevant sleep-checking effects
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
+    name = "Comatose",
+    rating = 4,
+    num = 213,
+  },
+  commander = {
+    onUpdate = function(pokemon)
+      if (this.gameType ~= 'doubles') return;
+      local ally = pokemon.allies()[0];
+      if (not ally or pokemon.baseSpecies.baseSpecies ~= 'Tatsugiri' or ally.baseSpecies.baseSpecies ~= 'Dondozo') {
+        -- Handle any edge cases
+        if (pokemon.getVolatile('commanding')) pokemon.removeVolatile('commanding');
+        return;
+      }
 
-			let i = BoostID;
-			for (i in ally.boosts) {
-				pokemon.boosts[i] = ally.boosts[i];
-			}
-			const volatilesToCopy = ['focusenergy', 'gmaxchistrike', 'laserfocus'];
-			for (const volatile of volatilesToCopy) {
-				if (ally.volatiles[volatile]) {
-					pokemon.addVolatile(volatile);
-					if (volatile === 'gmaxchistrike') pokemon.volatiles[volatile].layers = ally.volatiles[volatile].layers;
-				} else {
-					pokemon.removeVolatile(volatile);
-				}
-			}
-			this.add('-copyboost', pokemon, ally, '[from] ability = Costar');
-		},
-		flags = {},
-		name = "Costar",
-		rating = 0,
-		num = 294,
-	},
-	cottondown = {
-		onDamagingHit = function(damage, target, source, move)
-			let activated = false;
-			for (const pokemon of this.getAllActive()) {
-				if (pokemon === target || pokemon.fainted) continue;
-				if (!activated) {
-					this.add('-ability', target, 'Cotton Down');
-					activated = true;
-				}
-				this.boost({spe = -1}, pokemon, target, null, true);
-			}
-		},
-		flags = {},
-		name = "Cotton Down",
-		rating = 2,
-		num = 238,
-	},
-	cudchew = {
-		onEatItem = function(item, pokemon)
-			if (item.isBerry && pokemon.addVolatile('cudchew')) {
-				pokemon.volatiles['cudchew'].berry = item;
-			}
-		},
-		onEnd = function(pokemon)
-			delete pokemon.volatiles['cudchew'];
-		},
-		condition = {
-			noCopy = true,
-			duration = 2,
-			onRestart = function()
-				this.effectState.duration = 2;
-			},
-			onResidualOrder = 28,
-			onResidualSubOrder = 2,
-			onEnd = function(pokemon)
-				if (pokemon.hp) {
-					const item = this.effectState.berry;
-					this.add('-activate', pokemon, 'ability = Cud Chew');
-					this.add('-enditem', pokemon, item.name, '[eat]');
-					if (this.singleEvent('Eat', item, null, pokemon, null, null)) {
-						this.runEvent('EatItem', pokemon, null, null, item);
-					}
-					if (item.onEat) pokemon.ateBerry = true;
-				}
-			},
-		},
-		flags = {},
-		name = "Cud Chew",
-		rating = 2,
-		num = 291,
-	},
-	curiousmedicine = {
-		onStart = function(pokemon)
-			for (const ally of pokemon.adjacentAllies()) {
-				ally.clearBoosts();
-				this.add('-clearboost', ally, '[from] ability = Curious Medicine', '[of] ' + pokemon);
-			}
-		},
-		flags = {},
-		name = "Curious Medicine",
-		rating = 0,
-		num = 261,
-	},
-	cursedbody = {
-		onDamagingHit = function(damage, target, source, move)
-			if (source.volatiles['disable']) return;
-			if (!move.isMax && !move.flags['futuremove'] && move.id !== 'struggle') {
-				if (this.randomChance(3, 10)) {
-					source.addVolatile('disable', this.effectState.target);
-				}
-			}
-		},
-		flags = {},
-		name = "Cursed Body",
-		rating = 2,
-		num = 130,
-	},
-	cutecharm = {
-		onDamagingHit = function(damage, target, source, move)
-			if (this.checkMoveMakesContact(move, source, target)) {
-				if (this.randomChance(3, 10)) {
-					source.addVolatile('attract', this.effectState.target);
-				}
-			}
-		},
-		flags = {},
-		name = "Cute Charm",
-		rating = 0.5,
-		num = 56,
-	},
-	damp = {
-		onAnyTryMove = function(target, source, effect)
-			if (['explosion', 'mindblown', 'mistyexplosion', 'selfdestruct'].includes(effect.id)) {
-				this.attrLastMove('[still]');
-				this.add('cant', this.effectState.target, 'ability = Damp', effect, '[of] ' + target);
-				return false;
-			}
-		},
-		onAnyDamage = function(damage, target, source, effect)
-			if (effect && effect.name === 'Aftermath') {
-				return false;
-			}
-		},
-		flags = {breakable = 1},
-		name = "Damp",
-		rating = 0.5,
-		num = 6,
-	},
-	dancer = {
-		flags = {},
-		name = "Dancer",
-		-- implemented in runMove in scripts.js
-		rating = 1.5,
-		num = 216,
-	},
-	darkaura = {
-		onStart = function(pokemon)
-			if (this.suppressingAbility(pokemon)) return;
-			this.add('-ability', pokemon, 'Dark Aura');
-		},
-		onAnyBasePowerPriority = 20,
-		onAnyBasePower = function(basePower, source, target, move)
-			if (target === source || move.category === 'Status' || move.type !== 'Dark') return;
-			if (!move.auraBooster?.hasAbility('Dark Aura')) move.auraBooster = this.effectState.target;
-			if (move.auraBooster !== this.effectState.target) return;
-			return this.chainModify([move.hasAuraBreak ? 3072  = 5448, 4096]);
-		},
-		flags = {},
-		name = "Dark Aura",
-		rating = 3,
-		num = 186,
-	},
-	dauntlessshield = {
-		onStart = function(pokemon)
-			if (pokemon.shieldBoost) return;
-			pokemon.shieldBoost = true;
-			this.boost({def = 1}, pokemon);
-		},
-		flags = {},
-		name = "Dauntless Shield",
-		rating = 3.5,
-		num = 235,
-	},
-	dazzling = {
-		onFoeTryMove = function(target, source, move)
-			const targetAllExceptions = ['perishsong', 'flowershield', 'rototiller'];
-			if (move.target === 'foeSide' || (move.target === 'all' && !targetAllExceptions.includes(move.id))) {
-				return;
-			}
+      if (not pokemon.getVolatile('commanding')) {
+        -- If Dondozo already was commanded this fails
+        if (ally.getVolatile('commanded')) return;
+        -- Cancel all actions this turn for pokemon if applicable
+        this.queue.cancelAction(pokemon);
+        -- Add volatiles to both pokemon
+        this.add('-activate', pokemon, 'ability = Commander', '[of] ' + ally);
+        pokemon.addVolatile('commanding');
+        ally.addVolatile('commanded', pokemon);
+        -- Continued in conditions.ts in the volatiles
+      } else {
+        if (not ally.fainted) return;
+        pokemon.removeVolatile('commanding');
+      }
+    },
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1},
+    name = "Commander",
+    rating = 0,
+    num = 279,
+  },
+  competitive = {
+    onAfterEachBoost = function(boost, target, source, effect)
+      if (not source or target.isAlly(source)) {
+        return;
+      }
+      local statsLowered = false;
+      local i = BoostID;
+      for (i in boost) {
+        if (boost[i]not  < 0) {
+          statsLowered = true;
+        }
+      }
+      if (statsLowered) {
+        this.boost({spa = 2}, target, target, null, false, true);
+      }
+    },
+    flags = {},
+    name = "Competitive",
+    rating = 2.5,
+    num = 172,
+  },
+  compoundeyes = {
+    onSourceModifyAccuracyPriority = -1,
+    onSourceModifyAccuracy = function(accuracy)
+      if (typeof accuracy ~= 'number') return;
+      this.debug('compoundeyes - enhancing accuracy');
+      return this.chainModify([5325, 4096]);
+    },
+    flags = {},
+    name = "Compound Eyes",
+    rating = 3,
+    num = 14,
+  },
+  contrary = {
+    onChangeBoost = function(boost, target, source, effect)
+      if (effect and effect.id == 'zpower') return;
+      local i = BoostID;
+      for (i in boost) {
+        boost[i]not  *= -1;
+      }
+    },
+    flags = {breakable = 1},
+    name = "Contrary",
+    rating = 4.5,
+    num = 126,
+  },
+  corrosion = {
+    -- Implemented in sim/pokemon.js:Pokemon#setStatus
+    flags = {},
+    name = "Corrosion",
+    rating = 2.5,
+    num = 212,
+  },
+  costar = {
+    onStart = function(pokemon)
+      local ally = pokemon.allies()[0];
+      if (not ally) return;
 
-			const dazzlingHolder = this.effectState.target;
-			if ((source.isAlly(dazzlingHolder) || move.target === 'all') && move.priority > 0.1) {
-				this.attrLastMove('[still]');
-				this.add('cant', dazzlingHolder, 'ability = Dazzling', move, '[of] ' + target);
-				return false;
-			}
-		},
-		flags = {breakable = 1},
-		name = "Dazzling",
-		rating = 2.5,
-		num = 219,
-	},
-	defeatist = {
-		onModifyAtkPriority = 5,
-		onModifyAtk = function(atk, pokemon)
-			if (pokemon.hp <= pokemon.maxhp / 2) {
-				return this.chainModify(0.5);
-			}
-		},
-		onModifySpAPriority = 5,
-		onModifySpA = function(atk, pokemon)
-			if (pokemon.hp <= pokemon.maxhp / 2) {
-				return this.chainModify(0.5);
-			}
-		},
-		flags = {},
-		name = "Defeatist",
-		rating = -1,
-		num = 129,
-	},
-	defiant = {
-		onAfterEachBoost = function(boost, target, source, effect)
-			if (!source || target.isAlly(source)) {
-				return;
-			}
-			let statsLowered = false;
-			let i = BoostID;
-			for (i in boost) {
-				if (boost[i]! < 0) {
-					statsLowered = true;
-				}
-			}
-			if (statsLowered) {
-				this.boost({atk = 2}, target, target, null, false, true);
-			}
-		},
-		flags = {},
-		name = "Defiant",
-		rating = 3,
-		num = 128,
-	},
-	deltastream = {
-		onStart = function(source)
-			this.field.setWeather('deltastream');
-		},
-		onAnySetWeather = function(target, source, weather)
-			const strongWeathers = ['desolateland', 'primordialsea', 'deltastream'];
-			if (this.field.getWeather().id === 'deltastream' && !strongWeathers.includes(weather.id)) return false;
-		},
-		onEnd = function(pokemon)
-			if (this.field.weatherState.source !== pokemon) return;
-			for (const target of this.getAllActive()) {
-				if (target === pokemon) continue;
-				if (target.hasAbility('deltastream')) {
-					this.field.weatherState.source = target;
-					return;
-				}
-			}
-			this.field.clearWeather();
-		},
-		flags = {},
-		name = "Delta Stream",
-		rating = 4,
-		num = 191,
-	},
-	desolateland = {
-		onStart = function(source)
-			this.field.setWeather('desolateland');
-		},
-		onAnySetWeather = function(target, source, weather)
-			const strongWeathers = ['desolateland', 'primordialsea', 'deltastream'];
-			if (this.field.getWeather().id === 'desolateland' && !strongWeathers.includes(weather.id)) return false;
-		},
-		onEnd = function(pokemon)
-			if (this.field.weatherState.source !== pokemon) return;
-			for (const target of this.getAllActive()) {
-				if (target === pokemon) continue;
-				if (target.hasAbility('desolateland')) {
-					this.field.weatherState.source = target;
-					return;
-				}
-			}
-			this.field.clearWeather();
-		},
-		flags = {},
-		name = "Desolate Land",
-		rating = 4.5,
-		num = 190,
-	},
-	disguise = {
-		onDamagePriority = 1,
-		onDamage = function(damage, target, source, effect)
-			if (effect?.effectType === 'Move' && ['mimikyu', 'mimikyutotem'].includes(target.species.id)) {
-				this.add('-activate', target, 'ability = Disguise');
-				this.effectState.busted = true;
-				return 0;
-			}
-		},
-		onCriticalHit = function(target, source, move)
-			if (!target) return;
-			if (!['mimikyu', 'mimikyutotem'].includes(target.species.id)) {
-				return;
-			}
-			const hitSub = target.volatiles['substitute'] && !move.flags['bypasssub'] && !(move.infiltrates && this.gen >= 6);
-			if (hitSub) return;
+      local i = BoostID;
+      for (i in ally.boosts) {
+        pokemon.boosts[i] = ally.boosts[i];
+      }
+      local volatilesToCopy = ['focusenergy', 'gmaxchistrike', 'laserfocus'];
+      for (local volatile of volatilesToCopy) {
+        if (ally.volatiles[volatile]) {
+          pokemon.addVolatile(volatile);
+          if (volatile == 'gmaxchistrike') pokemon.volatiles[volatile].layers = ally.volatiles[volatile].layers;
+        } else {
+          pokemon.removeVolatile(volatile);
+        }
+      }
+      this.add('-copyboost', pokemon, ally, '[from] ability = Costar');
+    },
+    flags = {},
+    name = "Costar",
+    rating = 0,
+    num = 294,
+  },
+  cottondown = {
+    onDamagingHit = function(damage, target, source, move)
+      local activated = false;
+      for (local pokemon of this.getAllActive()) {
+        if (pokemon == target or pokemon.fainted) continue;
+        if (not activated) {
+          this.add('-ability', target, 'Cotton Down');
+          activated = true;
+        }
+        this.boost({spe = -1}, pokemon, target, null, true);
+      }
+    },
+    flags = {},
+    name = "Cotton Down",
+    rating = 2,
+    num = 238,
+  },
+  cudchew = {
+    onEatItem = function(item, pokemon)
+      if (item.isBerry and pokemon.addVolatile('cudchew')) {
+        pokemon.volatiles['cudchew'].berry = item;
+      }
+    },
+    onEnd = function(pokemon)
+      delete pokemon.volatiles['cudchew'];
+    },
+    condition = {
+      noCopy = true,
+      duration = 2,
+      onRestart = function()
+        this.effectState.duration = 2;
+      },
+      onResidualOrder = 28,
+      onResidualSubOrder = 2,
+      onEnd = function(pokemon)
+        if (pokemon.hp) {
+          local item = this.effectState.berry;
+          this.add('-activate', pokemon, 'ability = Cud Chew');
+          this.add('-enditem', pokemon, item.name, '[eat]');
+          if (this.singleEvent('Eat', item, null, pokemon, null, null)) {
+            this.runEvent('EatItem', pokemon, null, null, item);
+          }
+          if (item.onEat) pokemon.ateBerry = true;
+        }
+      },
+    },
+    flags = {},
+    name = "Cud Chew",
+    rating = 2,
+    num = 291,
+  },
+  curiousmedicine = {
+    onStart = function(pokemon)
+      for (local ally of pokemon.adjacentAllies()) {
+        ally.clearBoosts();
+        this.add('-clearboost', ally, '[from] ability = Curious Medicine', '[of] ' + pokemon);
+      }
+    },
+    flags = {},
+    name = "Curious Medicine",
+    rating = 0,
+    num = 261,
+  },
+  cursedbody = {
+    onDamagingHit = function(damage, target, source, move)
+      if (source.volatiles['disable']) return;
+      if (not move.isMax and not move.flags['futuremove'] and move.id ~= 'struggle') {
+        if (this.randomChance(3, 10)) {
+          source.addVolatile('disable', this.effectState.target);
+        }
+      }
+    },
+    flags = {},
+    name = "Cursed Body",
+    rating = 2,
+    num = 130,
+  },
+  cutecharm = {
+    onDamagingHit = function(damage, target, source, move)
+      if (this.checkMoveMakesContact(move, source, target)) {
+        if (this.randomChance(3, 10)) {
+          source.addVolatile('attract', this.effectState.target);
+        }
+      }
+    },
+    flags = {},
+    name = "Cute Charm",
+    rating = 0.5,
+    num = 56,
+  },
+  damp = {
+    onAnyTryMove = function(target, source, effect)
+      if (['explosion', 'mindblown', 'mistyexplosion', 'selfdestruct'].includes(effect.id)) {
+        this.attrLastMove('[still]');
+        this.add('cant', this.effectState.target, 'ability = Damp', effect, '[of] ' + target);
+        return false;
+      }
+    },
+    onAnyDamage = function(damage, target, source, effect)
+      if (effect and effect.name == 'Aftermath') {
+        return false;
+      }
+    },
+    flags = {breakable = 1},
+    name = "Damp",
+    rating = 0.5,
+    num = 6,
+  },
+  dancer = {
+    flags = {},
+    name = "Dancer",
+    -- implemented in runMove in scripts.js
+    rating = 1.5,
+    num = 216,
+  },
+  darkaura = {
+    onStart = function(pokemon)
+      if (this.suppressingAbility(pokemon)) return;
+      this.add('-ability', pokemon, 'Dark Aura');
+    },
+    onAnyBasePowerPriority = 20,
+    onAnyBasePower = function(basePower, source, target, move)
+      if (target == source or move.category == 'Status' or move.type ~= 'Dark') return;
+      if (not move.auraBooster?.hasAbility('Dark Aura')) move.auraBooster = this.effectState.target;
+      if (move.auraBooster ~= this.effectState.target) return;
+      return this.chainModify([move.hasAuraBreak ? 3072  = 5448, 4096]);
+    },
+    flags = {},
+    name = "Dark Aura",
+    rating = 3,
+    num = 186,
+  },
+  dauntlessshield = {
+    onStart = function(pokemon)
+      if (pokemon.shieldBoost) return;
+      pokemon.shieldBoost = true;
+      this.boost({def = 1}, pokemon);
+    },
+    flags = {},
+    name = "Dauntless Shield",
+    rating = 3.5,
+    num = 235,
+  },
+  dazzling = {
+    onFoeTryMove = function(target, source, move)
+      local targetAllExceptions = ['perishsong', 'flowershield', 'rototiller'];
+      if (move.target == 'foeSide' or (move.target == 'all' and not targetAllExceptions.includes(move.id))) {
+        return;
+      }
 
-			if (!target.runImmunity(move.type)) return;
-			return false;
-		},
-		onEffectiveness = function(typeMod, target, type, move)
-			if (!target || move.category === 'Status') return;
-			if (!['mimikyu', 'mimikyutotem'].includes(target.species.id)) {
-				return;
-			}
+      local dazzlingHolder = this.effectState.target;
+      if ((source.isAlly(dazzlingHolder) or move.target == 'all') and move.priority > 0.1) {
+        this.attrLastMove('[still]');
+        this.add('cant', dazzlingHolder, 'ability = Dazzling', move, '[of] ' + target);
+        return false;
+      }
+    },
+    flags = {breakable = 1},
+    name = "Dazzling",
+    rating = 2.5,
+    num = 219,
+  },
+  defeatist = {
+    onModifyAtkPriority = 5,
+    onModifyAtk = function(atk, pokemon)
+      if (pokemon.hp <= pokemon.maxhp / 2) {
+        return this.chainModify(0.5);
+      }
+    },
+    onModifySpAPriority = 5,
+    onModifySpA = function(atk, pokemon)
+      if (pokemon.hp <= pokemon.maxhp / 2) {
+        return this.chainModify(0.5);
+      }
+    },
+    flags = {},
+    name = "Defeatist",
+    rating = -1,
+    num = 129,
+  },
+  defiant = {
+    onAfterEachBoost = function(boost, target, source, effect)
+      if (not source or target.isAlly(source)) {
+        return;
+      }
+      local statsLowered = false;
+      local i = BoostID;
+      for (i in boost) {
+        if (boost[i]not  < 0) {
+          statsLowered = true;
+        }
+      }
+      if (statsLowered) {
+        this.boost({atk = 2}, target, target, null, false, true);
+      }
+    },
+    flags = {},
+    name = "Defiant",
+    rating = 3,
+    num = 128,
+  },
+  deltastream = {
+    onStart = function(source)
+      this.field.setWeather('deltastream');
+    },
+    onAnySetWeather = function(target, source, weather)
+      local strongWeathers = ['desolateland', 'primordialsea', 'deltastream'];
+      if (this.field.getWeather().id == 'deltastream' and not strongWeathers.includes(weather.id)) return false;
+    },
+    onEnd = function(pokemon)
+      if (this.field.weatherState.source ~= pokemon) return;
+      for (local target of this.getAllActive()) {
+        if (target == pokemon) continue;
+        if (target.hasAbility('deltastream')) {
+          this.field.weatherState.source = target;
+          return;
+        }
+      }
+      this.field.clearWeather();
+    },
+    flags = {},
+    name = "Delta Stream",
+    rating = 4,
+    num = 191,
+  },
+  desolateland = {
+    onStart = function(source)
+      this.field.setWeather('desolateland');
+    },
+    onAnySetWeather = function(target, source, weather)
+      local strongWeathers = ['desolateland', 'primordialsea', 'deltastream'];
+      if (this.field.getWeather().id == 'desolateland' and not strongWeathers.includes(weather.id)) return false;
+    },
+    onEnd = function(pokemon)
+      if (this.field.weatherState.source ~= pokemon) return;
+      for (local target of this.getAllActive()) {
+        if (target == pokemon) continue;
+        if (target.hasAbility('desolateland')) {
+          this.field.weatherState.source = target;
+          return;
+        }
+      }
+      this.field.clearWeather();
+    },
+    flags = {},
+    name = "Desolate Land",
+    rating = 4.5,
+    num = 190,
+  },
+  disguise = {
+    onDamagePriority = 1,
+    onDamage = function(damage, target, source, effect)
+      if (effect?.effectType == 'Move' and ['mimikyu', 'mimikyutotem'].includes(target.species.id)) {
+        this.add('-activate', target, 'ability = Disguise');
+        this.effectState.busted = true;
+        return 0;
+      }
+    },
+    onCriticalHit = function(target, source, move)
+      if (not target) return;
+      if (not ['mimikyu', 'mimikyutotem'].includes(target.species.id)) {
+        return;
+      }
+      local hitSub = target.volatiles['substitute'] and not move.flags['bypasssub'] and not (move.infiltrates and this.gen >= 6);
+      if (hitSub) return;
 
-			const hitSub = target.volatiles['substitute'] && !move.flags['bypasssub'] && !(move.infiltrates && this.gen >= 6);
-			if (hitSub) return;
+      if (not target.runImmunity(move.type)) return;
+      return false;
+    },
+    onEffectiveness = function(typeMod, target, type, move)
+      if (not target or move.category == 'Status') return;
+      if (not ['mimikyu', 'mimikyutotem'].includes(target.species.id)) {
+        return;
+      }
 
-			if (!target.runImmunity(move.type)) return;
-			return 0;
-		},
-		onUpdate = function(pokemon)
-			if (['mimikyu', 'mimikyutotem'].includes(pokemon.species.id) && this.effectState.busted) {
-				const speciesid = pokemon.species.id === 'mimikyutotem' ? 'Mimikyu-Busted-Totem'  = 'Mimikyu-Busted';
-				pokemon.formeChange(speciesid, this.effect, true);
-				this.damage(pokemon.baseMaxhp / 8, pokemon, pokemon, this.dex.species.get(speciesid));
-			}
-		},
-		flags = {
-			failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1,
-			breakable = 1, notransform = 1,
-		},
-		name = "Disguise",
-		rating = 3.5,
-		num = 209,
-	},
-	download = {
-		onStart = function(pokemon)
-			let totaldef = 0;
-			let totalspd = 0;
-			for (const target of pokemon.foes()) {
-				totaldef += target.getStat('def', false, true);
-				totalspd += target.getStat('spd', false, true);
-			}
-			if (totaldef && totaldef >= totalspd) {
-				this.boost({spa = 1});
-			} else if (totalspd) {
-				this.boost({atk = 1});
-			}
-		},
-		flags = {},
-		name = "Download",
-		rating = 3.5,
-		num = 88,
-	},
-	dragonsmaw = {
-		onModifyAtkPriority = 5,
-		onModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Dragon') {
-				this.debug('Dragon\'s Maw boost');
-				return this.chainModify(1.5);
-			}
-		},
-		onModifySpAPriority = 5,
-		onModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Dragon') {
-				this.debug('Dragon\'s Maw boost');
-				return this.chainModify(1.5);
-			}
-		},
-		flags = {},
-		name = "Dragon's Maw",
-		rating = 3.5,
-		num = 263,
-	},
-	drizzle = {
-		onStart = function(source)
-			for (const action of this.queue) {
-				if (action.choice === 'runPrimal' && action.pokemon === source && source.species.id === 'kyogre') return;
-				if (action.choice !== 'runSwitch' && action.choice !== 'runPrimal') break;
-			}
-			this.field.setWeather('raindance');
-		},
-		flags = {},
-		name = "Drizzle",
-		rating = 4,
-		num = 2,
-	},
-	drought = {
-		onStart = function(source)
-			for (const action of this.queue) {
-				if (action.choice === 'runPrimal' && action.pokemon === source && source.species.id === 'groudon') return;
-				if (action.choice !== 'runSwitch' && action.choice !== 'runPrimal') break;
-			}
-			this.field.setWeather('sunnyday');
-		},
-		flags = {},
-		name = "Drought",
-		rating = 4,
-		num = 70,
-	},
-	dryskin = {
-		onTryHit = function(target, source, move)
-			if (target !== source && move.type === 'Water') {
-				if (!this.heal(target.baseMaxhp / 4)) {
-					this.add('-immune', target, '[from] ability = Dry Skin');
-				}
-				return null;
-			}
-		},
-		onSourceBasePowerPriority = 17,
-		onSourceBasePower = function(basePower, attacker, defender, move)
-			if (move.type === 'Fire') {
-				return this.chainModify(1.25);
-			}
-		},
-		onWeather = function(target, source, effect)
-			if (target.hasItem('utilityumbrella')) return;
-			if (effect.id === 'raindance' || effect.id === 'primordialsea') {
-				this.heal(target.baseMaxhp / 8);
-			} else if (effect.id === 'sunnyday' || effect.id === 'desolateland') {
-				this.damage(target.baseMaxhp / 8, target, target);
-			}
-		},
-		flags = {breakable = 1},
-		name = "Dry Skin",
-		rating = 3,
-		num = 87,
-	},
-	earlybird = {
-		flags = {},
-		name = "Early Bird",
-		-- Implemented in statuses.js
-		rating = 1.5,
-		num = 48,
-	},
-	eartheater = {
-		onTryHit = function(target, source, move)
-			if (target !== source && move.type === 'Ground') {
-				if (!this.heal(target.baseMaxhp / 4)) {
-					this.add('-immune', target, '[from] ability = Earth Eater');
-				}
-				return null;
-			}
-		},
-		flags = {breakable = 1},
-		name = "Earth Eater",
-		rating = 3.5,
-		num = 297,
-	},
-	effectspore = {
-		onDamagingHit = function(damage, target, source, move)
-			if (this.checkMoveMakesContact(move, source, target) && !source.status && source.runStatusImmunity('powder')) {
-				const r = this.random(100);
-				if (r < 11) {
-					source.setStatus('slp', target);
-				} else if (r < 21) {
-					source.setStatus('par', target);
-				} else if (r < 30) {
-					source.setStatus('psn', target);
-				}
-			}
-		},
-		flags = {},
-		name = "Effect Spore",
-		rating = 2,
-		num = 27,
-	},
-	electricsurge = {
-		onStart = function(source)
-			this.field.setTerrain('electricterrain');
-		},
-		flags = {},
-		name = "Electric Surge",
-		rating = 4,
-		num = 226,
-	},
-	electromorphosis = {
-		onDamagingHitOrder = 1,
-		onDamagingHit = function(damage, target, source, move)
-			target.addVolatile('charge');
-		},
-		flags = {},
-		name = "Electromorphosis",
-		rating = 3,
-		num = 280,
-	},
-	embodyaspectcornerstone = {
-		onStart = function(pokemon)
-			if (pokemon.baseSpecies.name === 'Ogerpon-Cornerstone-Tera' && !this.effectState.embodied) {
-				this.effectState.embodied = true;
-				this.boost({def = 1}, pokemon);
-			}
-		},
-		onSwitchIn = function()
-			delete this.effectState.embodied;
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, notransform = 1},
-		name = "Embody Aspect (Cornerstone)",
-		rating = 3.5,
-		num = 304,
-	},
-	embodyaspecthearthflame = {
-		onStart = function(pokemon)
-			if (pokemon.baseSpecies.name === 'Ogerpon-Hearthflame-Tera' && !this.effectState.embodied) {
-				this.effectState.embodied = true;
-				this.boost({atk = 1}, pokemon);
-			}
-		},
-		onSwitchIn = function()
-			delete this.effectState.embodied;
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, notransform = 1},
-		name = "Embody Aspect (Hearthflame)",
-		rating = 3.5,
-		num = 303,
-	},
-	embodyaspectteal = {
-		onStart = function(pokemon)
-			if (pokemon.baseSpecies.name === 'Ogerpon-Teal-Tera' && !this.effectState.embodied) {
-				this.effectState.embodied = true;
-				this.boost({spe = 1}, pokemon);
-			}
-		},
-		onSwitchIn = function()
-			delete this.effectState.embodied;
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, notransform = 1},
-		name = "Embody Aspect (Teal)",
-		rating = 3.5,
-		num = 301,
-	},
-	embodyaspectwellspring = {
-		onStart = function(pokemon)
-			if (pokemon.baseSpecies.name === 'Ogerpon-Wellspring-Tera' && !this.effectState.embodied) {
-				this.effectState.embodied = true;
-				this.boost({spd = 1}, pokemon);
-			}
-		},
-		onSwitchIn = function()
-			delete this.effectState.embodied;
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, notransform = 1},
-		name = "Embody Aspect (Wellspring)",
-		rating = 3.5,
-		num = 302,
-	},
-	emergencyexit = {
-		onEmergencyExit = function(target)
-			if (!this.canSwitch(target.side) || target.forceSwitchFlag || target.switchFlag) return;
-			for (const side of this.sides) {
-				for (const active of side.active) {
-					active.switchFlag = false;
-				}
-			}
-			target.switchFlag = true;
-			this.add('-activate', target, 'ability = Emergency Exit');
-		},
-		flags = {},
-		name = "Emergency Exit",
-		rating = 1,
-		num = 194,
-	},
-	fairyaura = {
-		onStart = function(pokemon)
-			if (this.suppressingAbility(pokemon)) return;
-			this.add('-ability', pokemon, 'Fairy Aura');
-		},
-		onAnyBasePowerPriority = 20,
-		onAnyBasePower = function(basePower, source, target, move)
-			if (target === source || move.category === 'Status' || move.type !== 'Fairy') return;
-			if (!move.auraBooster?.hasAbility('Fairy Aura')) move.auraBooster = this.effectState.target;
-			if (move.auraBooster !== this.effectState.target) return;
-			return this.chainModify([move.hasAuraBreak ? 3072  = 5448, 4096]);
-		},
-		flags = {},
-		name = "Fairy Aura",
-		rating = 3,
-		num = 187,
-	},
-	filter = {
-		onSourceModifyDamage = function(damage, source, target, move)
-			if (target.getMoveHitData(move).typeMod > 0) {
-				this.debug('Filter neutralize');
-				return this.chainModify(0.75);
-			}
-		},
-		flags = {breakable = 1},
-		name = "Filter",
-		rating = 3,
-		num = 111,
-	},
-	flamebody = {
-		onDamagingHit = function(damage, target, source, move)
-			if (this.checkMoveMakesContact(move, source, target)) {
-				if (this.randomChance(3, 10)) {
-					source.trySetStatus('brn', target);
-				}
-			}
-		},
-		flags = {},
-		name = "Flame Body",
-		rating = 2,
-		num = 49,
-	},
-	flareboost = {
-		onBasePowerPriority = 19,
-		onBasePower = function(basePower, attacker, defender, move)
-			if (attacker.status === 'brn' && move.category === 'Special') {
-				return this.chainModify(1.5);
-			}
-		},
-		flags = {},
-		name = "Flare Boost",
-		rating = 2,
-		num = 138,
-	},
-	flashfire = {
-		onTryHit = function(target, source, move)
-			if (target !== source && move.type === 'Fire') {
-				move.accuracy = true;
-				if (!target.addVolatile('flashfire')) {
-					this.add('-immune', target, '[from] ability = Flash Fire');
-				}
-				return null;
-			}
-		},
-		onEnd = function(pokemon)
-			pokemon.removeVolatile('flashfire');
-		},
-		condition = {
-			noCopy = true, -- doesn't get copied by Baton Pass
-			onStart = function(target)
-				this.add('-start', target, 'ability = Flash Fire');
-			},
-			onModifyAtkPriority = 5,
-			onModifyAtk = function(atk, attacker, defender, move)
-				if (move.type === 'Fire' && attacker.hasAbility('flashfire')) {
-					this.debug('Flash Fire boost');
-					return this.chainModify(1.5);
-				}
-			},
-			onModifySpAPriority = 5,
-			onModifySpA = function(atk, attacker, defender, move)
-				if (move.type === 'Fire' && attacker.hasAbility('flashfire')) {
-					this.debug('Flash Fire boost');
-					return this.chainModify(1.5);
-				}
-			},
-			onEnd = function(target)
-				this.add('-end', target, 'ability = Flash Fire', '[silent]');
-			},
-		},
-		flags = {breakable = 1},
-		name = "Flash Fire",
-		rating = 3.5,
-		num = 18,
-	},
-	flowergift = {
-		onStart = function(pokemon)
-			this.singleEvent('WeatherChange', this.effect, this.effectState, pokemon);
-		},
-		onWeatherChange = function(pokemon)
-			if (!pokemon.isActive || pokemon.baseSpecies.baseSpecies !== 'Cherrim' || pokemon.transformed) return;
-			if (!pokemon.hp) return;
-			if (['sunnyday', 'desolateland'].includes(pokemon.effectiveWeather())) {
-				if (pokemon.species.id !== 'cherrimsunshine') {
-					pokemon.formeChange('Cherrim-Sunshine', this.effect, false, '[msg]');
-				}
-			} else {
-				if (pokemon.species.id === 'cherrimsunshine') {
-					pokemon.formeChange('Cherrim', this.effect, false, '[msg]');
-				}
-			}
-		},
-		onAllyModifyAtkPriority = 3,
-		onAllyModifyAtk = function(atk, pokemon)
-			if (this.effectState.target.baseSpecies.baseSpecies !== 'Cherrim') return;
-			if (['sunnyday', 'desolateland'].includes(pokemon.effectiveWeather())) {
-				return this.chainModify(1.5);
-			}
-		},
-		onAllyModifySpDPriority = 4,
-		onAllyModifySpD = function(spd, pokemon)
-			if (this.effectState.target.baseSpecies.baseSpecies !== 'Cherrim') return;
-			if (['sunnyday', 'desolateland'].includes(pokemon.effectiveWeather())) {
-				return this.chainModify(1.5);
-			}
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, breakable = 1},
-		name = "Flower Gift",
-		rating = 1,
-		num = 122,
-	},
-	flowerveil = {
-		onAllyTryBoost = function(boost, target, source, effect)
-			if ((source && target === source) || !target.hasType('Grass')) return;
-			let showMsg = false;
-			let i = BoostID;
-			for (i in boost) {
-				if (boost[i]! < 0) {
-					delete boost[i];
-					showMsg = true;
-				}
-			}
-			if (showMsg && !(effect as ActiveMove).secondaries) {
-				const effectHolder = this.effectState.target;
-				this.add('-block', target, 'ability = Flower Veil', '[of] ' + effectHolder);
-			}
-		},
-		onAllySetStatus = function(status, target, source, effect)
-			if (target.hasType('Grass') && source && target !== source && effect && effect.id !== 'yawn') {
-				this.debug('interrupting setStatus with Flower Veil');
-				if (effect.name === 'Synchronize' || (effect.effectType === 'Move' && !effect.secondaries)) {
-					const effectHolder = this.effectState.target;
-					this.add('-block', target, 'ability = Flower Veil', '[of] ' + effectHolder);
-				}
-				return null;
-			}
-		},
-		onAllyTryAddVolatile = function(status, target)
-			if (target.hasType('Grass') && status.id === 'yawn') {
-				this.debug('Flower Veil blocking yawn');
-				const effectHolder = this.effectState.target;
-				this.add('-block', target, 'ability = Flower Veil', '[of] ' + effectHolder);
-				return null;
-			}
-		},
-		flags = {breakable = 1},
-		name = "Flower Veil",
-		rating = 0,
-		num = 166,
-	},
-	fluffy = {
-		onSourceModifyDamage = function(damage, source, target, move)
-			let mod = 1;
-			if (move.type === 'Fire') mod *= 2;
-			if (move.flags['contact']) mod /= 2;
-			return this.chainModify(mod);
-		},
-		flags = {breakable = 1},
-		name = "Fluffy",
-		rating = 3.5,
-		num = 218,
-	},
-	forecast = {
-		onStart = function(pokemon)
-			this.singleEvent('WeatherChange', this.effect, this.effectState, pokemon);
-		},
-		onWeatherChange = function(pokemon)
-			if (pokemon.baseSpecies.baseSpecies !== 'Castform' || pokemon.transformed) return;
-			let forme = null;
-			switch (pokemon.effectiveWeather()) {
-			case 'sunnyday':
-			case 'desolateland':
-				if (pokemon.species.id !== 'castformsunny') forme = 'Castform-Sunny';
-				break;
-			case 'raindance':
-			case 'primordialsea':
-				if (pokemon.species.id !== 'castformrainy') forme = 'Castform-Rainy';
-				break;
-			case 'hail':
-			case 'snow':
-				if (pokemon.species.id !== 'castformsnowy') forme = 'Castform-Snowy';
-				break;
-			default:
-				if (pokemon.species.id !== 'castform') forme = 'Castform';
-				break;
-			}
-			if (pokemon.isActive && forme) {
-				pokemon.formeChange(forme, this.effect, false, '[msg]');
-			}
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1},
-		name = "Forecast",
-		rating = 2,
-		num = 59,
-	},
-	forewarn = {
-		onStart = function(pokemon)
-			let warnMoves = (Move | Pokemon)[][] = [];
-			let warnBp = 1;
-			for (const target of pokemon.foes()) {
-				for (const moveSlot of target.moveSlots) {
-					const move = this.dex.moves.get(moveSlot.move);
-					let bp = move.basePower;
-					if (move.ohko) bp = 150;
-					if (move.id === 'counter' || move.id === 'metalburst' || move.id === 'mirrorcoat') bp = 120;
-					if (bp === 1) bp = 80;
-					if (!bp && move.category !== 'Status') bp = 80;
-					if (bp > warnBp) {
-						warnMoves = [[move, target]];
-						warnBp = bp;
-					} else if (bp === warnBp) {
-						warnMoves.push([move, target]);
-					}
-				}
-			}
-			if (!warnMoves.length) return;
-			const [warnMoveName, warnTarget] = this.sample(warnMoves);
-			this.add('-activate', pokemon, 'ability = Forewarn', warnMoveName, '[of] ' + warnTarget);
-		},
-		flags = {},
-		name = "Forewarn",
-		rating = 0.5,
-		num = 108,
-	},
-	friendguard = {
-		onAnyModifyDamage = function(damage, source, target, move)
-			if (target !== this.effectState.target && target.isAlly(this.effectState.target)) {
-				this.debug('Friend Guard weaken');
-				return this.chainModify(0.75);
-			}
-		},
-		flags = {breakable = 1},
-		name = "Friend Guard",
-		rating = 0,
-		num = 132,
-	},
-	frisk = {
-		onStart = function(pokemon)
-			for (const target of pokemon.foes()) {
-				if (target.item) {
-					this.add('-item', target, target.getItem().name, '[from] ability = Frisk', '[of] ' + pokemon, '[identify]');
-				}
-			}
-		},
-		flags = {},
-		name = "Frisk",
-		rating = 1.5,
-		num = 119,
-	},
-	fullmetalbody = {
-		onTryBoost = function(boost, target, source, effect)
-			if (source && target === source) return;
-			let showMsg = false;
-			let i = BoostID;
-			for (i in boost) {
-				if (boost[i]! < 0) {
-					delete boost[i];
-					showMsg = true;
-				}
-			}
-			if (showMsg && !(effect as ActiveMove).secondaries && effect.id !== 'octolock') {
-				this.add("-fail", target, "unboost", "[from] ability = Full Metal Body", "[of] " + target);
-			}
-		},
-		flags = {},
-		name = "Full Metal Body",
-		rating = 2,
-		num = 230,
-	},
-	furcoat = {
-		onModifyDefPriority = 6,
-		onModifyDef = function(def)
-			return this.chainModify(2);
-		},
-		flags = {breakable = 1},
-		name = "Fur Coat",
-		rating = 4,
-		num = 169,
-	},
-	galewings = {
-		onModifyPriority = function(priority, pokemon, target, move)
-			if (move?.type === 'Flying' && pokemon.hp === pokemon.maxhp) return priority + 1;
-		},
-		flags = {},
-		name = "Gale Wings",
-		rating = 1.5,
-		num = 177,
-	},
-	galvanize = {
-		onModifyTypePriority = -1,
-		onModifyType = function(move, pokemon)
-			const noModifyType = [
-				'judgment', 'multiattack', 'naturalgift', 'revelationdance', 'technoblast', 'terrainpulse', 'weatherball',
-			];
-			if (move.type === 'Normal' && !noModifyType.includes(move.id) &&
-				!(move.isZ && move.category !== 'Status') && !(move.name === 'Tera Blast' && pokemon.terastallized)) {
-				move.type = 'Electric';
-				move.typeChangerBoosted = this.effect;
-			}
-		},
-		onBasePowerPriority = 23,
-		onBasePower = function(basePower, pokemon, target, move)
-			if (move.typeChangerBoosted === this.effect) return this.chainModify([4915, 4096]);
-		},
-		flags = {},
-		name = "Galvanize",
-		rating = 4,
-		num = 206,
-	},
-	gluttony = {
-		onStart = function(pokemon)
-			pokemon.abilityState.gluttony = true;
-		},
-		onDamage = function(item, pokemon)
-			pokemon.abilityState.gluttony = true;
-		},
-		flags = {},
-		name = "Gluttony",
-		rating = 1.5,
-		num = 82,
-	},
-	goodasgold = {
-		onTryHit = function(target, source, move)
-			if (move.category === 'Status' && target !== source) {
-				this.add('-immune', target, '[from] ability = Good as Gold');
-				return null;
-			}
-		},
-		flags = {breakable = 1},
-		name = "Good as Gold",
-		rating = 5,
-		num = 283,
-	},
-	gooey = {
-		onDamagingHit = function(damage, target, source, move)
-			if (this.checkMoveMakesContact(move, source, target, true)) {
-				this.add('-ability', target, 'Gooey');
-				this.boost({spe = -1}, source, target, null, true);
-			}
-		},
-		flags = {},
-		name = "Gooey",
-		rating = 2,
-		num = 183,
-	},
-	gorillatactics = {
-		onStart = function(pokemon)
-			pokemon.abilityState.choiceLock = "";
-		},
-		onBeforeMove = function(pokemon, target, move)
-			if (move.isZOrMaxPowered || move.id === 'struggle') return;
-			if (pokemon.abilityState.choiceLock && pokemon.abilityState.choiceLock !== move.id) {
-				-- Fails unless ability is being ignored (these events will not run), no PP lost.
-				this.addMove('move', pokemon, move.name);
-				this.attrLastMove('[still]');
-				this.debug("Disabled by Gorilla Tactics");
-				this.add('-fail', pokemon);
-				return false;
-			}
-		},
-		onModifyMove = function(move, pokemon)
-			if (pokemon.abilityState.choiceLock || move.isZOrMaxPowered || move.id === 'struggle') return;
-			pokemon.abilityState.choiceLock = move.id;
-		},
-		onModifyAtkPriority = 1,
-		onModifyAtk = function(atk, pokemon)
-			if (pokemon.volatiles['dynamax']) return;
-			-- PLACEHOLDER
-			this.debug('Gorilla Tactics Atk Boost');
-			return this.chainModify(1.5);
-		},
-		onDisableMove = function(pokemon)
-			if (!pokemon.abilityState.choiceLock) return;
-			if (pokemon.volatiles['dynamax']) return;
-			for (const moveSlot of pokemon.moveSlots) {
-				if (moveSlot.id !== pokemon.abilityState.choiceLock) {
-					pokemon.disableMove(moveSlot.id, false, this.effectState.sourceEffect);
-				}
-			}
-		},
-		onEnd = function(pokemon)
-			pokemon.abilityState.choiceLock = "";
-		},
-		flags = {},
-		name = "Gorilla Tactics",
-		rating = 4.5,
-		num = 255,
-	},
-	grasspelt = {
-		onModifyDefPriority = 6,
-		onModifyDef = function(pokemon)
-			if (this.field.isTerrain('grassyterrain')) return this.chainModify(1.5);
-		},
-		flags = {breakable = 1},
-		name = "Grass Pelt",
-		rating = 0.5,
-		num = 179,
-	},
-	grassysurge = {
-		onStart = function(source)
-			this.field.setTerrain('grassyterrain');
-		},
-		flags = {},
-		name = "Grassy Surge",
-		rating = 4,
-		num = 229,
-	},
-	grimneigh = {
-		onSourceAfterFaint = function(length, target, source, effect)
-			if (effect && effect.effectType === 'Move') {
-				this.boost({spa = length}, source);
-			}
-		},
-		flags = {},
-		name = "Grim Neigh",
-		rating = 3,
-		num = 265,
-	},
-	guarddog = {
-		onDragOutPriority = 1,
-		onDragOut = function(pokemon)
-			this.add('-activate', pokemon, 'ability = Guard Dog');
-			return null;
-		},
-		onTryBoost = function(boost, target, source, effect)
-			if (effect.name === 'Intimidate' && boost.atk) {
-				delete boost.atk;
-				this.boost({atk = 1}, target, target, null, false, true);
-			}
-		},
-		flags = {breakable = 1},
-		name = "Guard Dog",
-		rating = 2,
-		num = 275,
-	},
-	gulpmissile = {
-		onDamagingHit = function(damage, target, source, move)
-			if (!source.hp || !source.isActive || target.isSemiInvulnerable()) return;
-			if (['cramorantgulping', 'cramorantgorging'].includes(target.species.id)) {
-				this.damage(source.baseMaxhp / 4, source, target);
-				if (target.species.id === 'cramorantgulping') {
-					this.boost({def = -1}, source, target, null, true);
-				} else {
-					source.trySetStatus('par', target, move);
-				}
-				target.formeChange('cramorant', move);
-			}
-		},
-		-- The Dive part of this mechanic is implemented in Dive's `onTryMove` in moves.ts
-		onSourceTryPrimaryHit = function(target, source, effect)
-			if (effect?.id === 'surf' && source.hasAbility('gulpmissile') && source.species.name === 'Cramorant') {
-				const forme = source.hp <= source.maxhp / 2 ? 'cramorantgorging'  = 'cramorantgulping';
-				source.formeChange(forme, effect);
-			}
-		},
-		flags = {cantsuppress = 1, notransform = 1},
-		name = "Gulp Missile",
-		rating = 2.5,
-		num = 241,
-	},
-	guts = {
-		onModifyAtkPriority = 5,
-		onModifyAtk = function(atk, pokemon)
-			if (pokemon.status) {
-				return this.chainModify(1.5);
-			}
-		},
-		flags = {},
-		name = "Guts",
-		rating = 3.5,
-		num = 62,
-	},
-	hadronengine = {
-		onStart = function(pokemon)
-			if (!this.field.setTerrain('electricterrain') && this.field.isTerrain('electricterrain')) {
-				this.add('-activate', pokemon, 'ability = Hadron Engine');
-			}
-		},
-		onModifySpAPriority = 5,
-		onModifySpA = function(atk, attacker, defender, move)
-			if (this.field.isTerrain('electricterrain')) {
-				this.debug('Hadron Engine boost');
-				return this.chainModify([5461, 4096]);
-			}
-		},
-		flags = {},
-		name = "Hadron Engine",
-		rating = 4.5,
-		num = 289,
-	},
-	harvest = {
-		onResidualOrder = 28,
-		onResidualSubOrder = 2,
-		onResidual = function(pokemon)
-			if (this.field.isWeather(['sunnyday', 'desolateland']) || this.randomChance(1, 2)) {
-				if (pokemon.hp && !pokemon.item && this.dex.items.get(pokemon.lastItem).isBerry) {
-					pokemon.setItem(pokemon.lastItem);
-					pokemon.lastItem = '';
-					this.add('-item', pokemon, pokemon.getItem(), '[from] ability = Harvest');
-				}
-			}
-		},
-		flags = {},
-		name = "Harvest",
-		rating = 2.5,
-		num = 139,
-	},
-	healer = {
-		onResidualOrder = 5,
-		onResidualSubOrder = 3,
-		onResidual = function(pokemon)
-			for (const allyActive of pokemon.adjacentAllies()) {
-				if (allyActive.status && this.randomChance(3, 10)) {
-					this.add('-activate', pokemon, 'ability = Healer');
-					allyActive.cureStatus();
-				}
-			}
-		},
-		flags = {},
-		name = "Healer",
-		rating = 0,
-		num = 131,
-	},
-	heatproof = {
-		onSourceModifyAtkPriority = 6,
-		onSourceModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Fire') {
-				this.debug('Heatproof Atk weaken');
-				return this.chainModify(0.5);
-			}
-		},
-		onSourceModifySpAPriority = 5,
-		onSourceModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Fire') {
-				this.debug('Heatproof SpA weaken');
-				return this.chainModify(0.5);
-			}
-		},
-		onDamage = function(damage, target, source, effect)
-			if (effect && effect.id === 'brn') {
-				return damage / 2;
-			}
-		},
-		flags = {breakable = 1},
-		name = "Heatproof",
-		rating = 2,
-		num = 85,
-	},
-	heavymetal = {
-		onModifyWeightPriority = 1,
-		onModifyWeight = function(weighthg)
-			return weighthg * 2;
-		},
-		flags = {breakable = 1},
-		name = "Heavy Metal",
-		rating = 0,
-		num = 134,
-	},
-	honeygather = {
-		flags = {},
-		name = "Honey Gather",
-		rating = 0,
-		num = 118,
-	},
-	hospitality = {
-		onStart = function(pokemon)
-			for (const ally of pokemon.adjacentAllies()) {
-				this.heal(ally.baseMaxhp / 4, ally, pokemon);
-			}
-		},
-		flags = {},
-		name = "Hospitality",
-		rating = 0,
-		num = 299,
-	},
-	hugepower = {
-		onModifyAtkPriority = 5,
-		onModifyAtk = function(atk)
-			return this.chainModify(2);
-		},
-		flags = {},
-		name = "Huge Power",
-		rating = 5,
-		num = 37,
-	},
-	hungerswitch = {
-		onResidualOrder = 29,
-		onResidual = function(pokemon)
-			if (pokemon.species.baseSpecies !== 'Morpeko' || pokemon.terastallized) return;
-			const targetForme = pokemon.species.name === 'Morpeko' ? 'Morpeko-Hangry'  = 'Morpeko';
-			pokemon.formeChange(targetForme);
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, notransform = 1},
-		name = "Hunger Switch",
-		rating = 1,
-		num = 258,
-	},
-	hustle = {
-		-- This should be applied directly to the stat as opposed to chaining with the others
-		onModifyAtkPriority = 5,
-		onModifyAtk = function(atk)
-			return this.modify(atk, 1.5);
-		},
-		onSourceModifyAccuracyPriority = -1,
-		onSourceModifyAccuracy = function(accuracy, target, source, move)
-			if (move.category === 'Physical' && typeof accuracy === 'number') {
-				return this.chainModify([3277, 4096]);
-			}
-		},
-		flags = {},
-		name = "Hustle",
-		rating = 3.5,
-		num = 55,
-	},
-	hydration = {
-		onResidualOrder = 5,
-		onResidualSubOrder = 3,
-		onResidual = function(pokemon)
-			if (pokemon.status && ['raindance', 'primordialsea'].includes(pokemon.effectiveWeather())) {
-				this.debug('hydration');
-				this.add('-activate', pokemon, 'ability = Hydration');
-				pokemon.cureStatus();
-			}
-		},
-		flags = {},
-		name = "Hydration",
-		rating = 1.5,
-		num = 93,
-	},
-	hypercutter = {
-		onTryBoost = function(boost, target, source, effect)
-			if (source && target === source) return;
-			if (boost.atk && boost.atk < 0) {
-				delete boost.atk;
-				if (!(effect as ActiveMove).secondaries) {
-					this.add("-fail", target, "unboost", "Attack", "[from] ability = Hyper Cutter", "[of] " + target);
-				}
-			}
-		},
-		flags = {breakable = 1},
-		name = "Hyper Cutter",
-		rating = 1.5,
-		num = 52,
-	},
-	icebody = {
-		onWeather = function(target, source, effect)
-			if (effect.id === 'hail' || effect.id === 'snow') {
-				this.heal(target.baseMaxhp / 16);
-			}
-		},
-		onImmunity = function(type, pokemon)
-			if (type === 'hail') return false;
-		},
-		flags = {},
-		name = "Ice Body",
-		rating = 1,
-		num = 115,
-	},
-	iceface = {
-		onStart = function(pokemon)
-			if (this.field.isWeather(['hail', 'snow']) && pokemon.species.id === 'eiscuenoice') {
-				this.add('-activate', pokemon, 'ability = Ice Face');
-				this.effectState.busted = false;
-				pokemon.formeChange('Eiscue', this.effect, true);
-			}
-		},
-		onDamagePriority = 1,
-		onDamage = function(damage, target, source, effect)
-			if (effect?.effectType === 'Move' && effect.category === 'Physical' && target.species.id === 'eiscue') {
-				this.add('-activate', target, 'ability = Ice Face');
-				this.effectState.busted = true;
-				return 0;
-			}
-		},
-		onCriticalHit = function(target, type, move)
-			if (!target) return;
-			if (move.category !== 'Physical' || target.species.id !== 'eiscue') return;
-			if (target.volatiles['substitute'] && !(move.flags['bypasssub'] || move.infiltrates)) return;
-			if (!target.runImmunity(move.type)) return;
-			return false;
-		},
-		onEffectiveness = function(typeMod, target, type, move)
-			if (!target) return;
-			if (move.category !== 'Physical' || target.species.id !== 'eiscue') return;
+      local hitSub = target.volatiles['substitute'] and not move.flags['bypasssub'] and not (move.infiltrates and this.gen >= 6);
+      if (hitSub) return;
 
-			const hitSub = target.volatiles['substitute'] && !move.flags['bypasssub'] && !(move.infiltrates && this.gen >= 6);
-			if (hitSub) return;
+      if (not target.runImmunity(move.type)) return;
+      return 0;
+    },
+    onUpdate = function(pokemon)
+      if (['mimikyu', 'mimikyutotem'].includes(pokemon.species.id) and this.effectState.busted) {
+        local speciesid = pokemon.species.id == 'mimikyutotem' ? 'Mimikyu-Busted-Totem'  = 'Mimikyu-Busted';
+        pokemon.formeChange(speciesid, this.effect, true);
+        this.damage(pokemon.baseMaxhp / 8, pokemon, pokemon, this.dex.species.get(speciesid));
+      }
+    },
+    flags = {
+      failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1,
+      breakable = 1, notransform = 1,
+    },
+    name = "Disguise",
+    rating = 3.5,
+    num = 209,
+  },
+  download = {
+    onStart = function(pokemon)
+      local totaldef = 0;
+      local totalspd = 0;
+      for (local target of pokemon.foes()) {
+        totaldef += target.getStat('def', false, true);
+        totalspd += target.getStat('spd', false, true);
+      }
+      if (totaldef and totaldef >= totalspd) {
+        this.boost({spa = 1});
+      } else if (totalspd) {
+        this.boost({atk = 1});
+      }
+    },
+    flags = {},
+    name = "Download",
+    rating = 3.5,
+    num = 88,
+  },
+  dragonsmaw = {
+    onModifyAtkPriority = 5,
+    onModifyAtk = function(atk, attacker, defender, move)
+      if (move.type == 'Dragon') {
+        this.debug('Dragon\'s Maw boost');
+        return this.chainModify(1.5);
+      }
+    },
+    onModifySpAPriority = 5,
+    onModifySpA = function(atk, attacker, defender, move)
+      if (move.type == 'Dragon') {
+        this.debug('Dragon\'s Maw boost');
+        return this.chainModify(1.5);
+      }
+    },
+    flags = {},
+    name = "Dragon's Maw",
+    rating = 3.5,
+    num = 263,
+  },
+  drizzle = {
+    onStart = function(source)
+      for (local action of this.queue) {
+        if (action.choice == 'runPrimal' and action.pokemon == source and source.species.id == 'kyogre') return;
+        if (action.choice ~= 'runSwitch' and action.choice ~= 'runPrimal') break;
+      }
+      this.field.setWeather('raindance');
+    },
+    flags = {},
+    name = "Drizzle",
+    rating = 4,
+    num = 2,
+  },
+  drought = {
+    onStart = function(source)
+      for (local action of this.queue) {
+        if (action.choice == 'runPrimal' and action.pokemon == source and source.species.id == 'groudon') return;
+        if (action.choice ~= 'runSwitch' and action.choice ~= 'runPrimal') break;
+      }
+      this.field.setWeather('sunnyday');
+    },
+    flags = {},
+    name = "Drought",
+    rating = 4,
+    num = 70,
+  },
+  dryskin = {
+    onTryHit = function(target, source, move)
+      if (target ~= source and move.type == 'Water') {
+        if (not this.heal(target.baseMaxhp / 4)) {
+          this.add('-immune', target, '[from] ability = Dry Skin');
+        }
+        return null;
+      }
+    },
+    onSourceBasePowerPriority = 17,
+    onSourceBasePower = function(basePower, attacker, defender, move)
+      if (move.type == 'Fire') {
+        return this.chainModify(1.25);
+      }
+    },
+    onWeather = function(target, source, effect)
+      if (target.hasItem('utilityumbrella')) return;
+      if (effect.id == 'raindance' or effect.id == 'primordialsea') {
+        this.heal(target.baseMaxhp / 8);
+      } else if (effect.id == 'sunnyday' or effect.id == 'desolateland') {
+        this.damage(target.baseMaxhp / 8, target, target);
+      }
+    },
+    flags = {breakable = 1},
+    name = "Dry Skin",
+    rating = 3,
+    num = 87,
+  },
+  earlybird = {
+    flags = {},
+    name = "Early Bird",
+    -- Implemented in statuses.js
+    rating = 1.5,
+    num = 48,
+  },
+  eartheater = {
+    onTryHit = function(target, source, move)
+      if (target ~= source and move.type == 'Ground') {
+        if (not this.heal(target.baseMaxhp / 4)) {
+          this.add('-immune', target, '[from] ability = Earth Eater');
+        }
+        return null;
+      }
+    },
+    flags = {breakable = 1},
+    name = "Earth Eater",
+    rating = 3.5,
+    num = 297,
+  },
+  effectspore = {
+    onDamagingHit = function(damage, target, source, move)
+      if (this.checkMoveMakesContact(move, source, target) and not source.status and source.runStatusImmunity('powder')) {
+        local r = this.random(100);
+        if (r < 11) {
+          source.setStatus('slp', target);
+        } else if (r < 21) {
+          source.setStatus('par', target);
+        } else if (r < 30) {
+          source.setStatus('psn', target);
+        }
+      }
+    },
+    flags = {},
+    name = "Effect Spore",
+    rating = 2,
+    num = 27,
+  },
+  electricsurge = {
+    onStart = function(source)
+      this.field.setTerrain('electricterrain');
+    },
+    flags = {},
+    name = "Electric Surge",
+    rating = 4,
+    num = 226,
+  },
+  electromorphosis = {
+    onDamagingHitOrder = 1,
+    onDamagingHit = function(damage, target, source, move)
+      target.addVolatile('charge');
+    },
+    flags = {},
+    name = "Electromorphosis",
+    rating = 3,
+    num = 280,
+  },
+  embodyaspectcornerstone = {
+    onStart = function(pokemon)
+      if (pokemon.baseSpecies.name == 'Ogerpon-Cornerstone-Tera' and not this.effectState.embodied) {
+        this.effectState.embodied = true;
+        this.boost({def = 1}, pokemon);
+      }
+    },
+    onSwitchIn = function()
+      delete this.effectState.embodied;
+    },
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, notransform = 1},
+    name = "Embody Aspect (Cornerstone)",
+    rating = 3.5,
+    num = 304,
+  },
+  embodyaspecthearthflame = {
+    onStart = function(pokemon)
+      if (pokemon.baseSpecies.name == 'Ogerpon-Hearthflame-Tera' and not this.effectState.embodied) {
+        this.effectState.embodied = true;
+        this.boost({atk = 1}, pokemon);
+      }
+    },
+    onSwitchIn = function()
+      delete this.effectState.embodied;
+    },
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, notransform = 1},
+    name = "Embody Aspect (Hearthflame)",
+    rating = 3.5,
+    num = 303,
+  },
+  embodyaspectteal = {
+    onStart = function(pokemon)
+      if (pokemon.baseSpecies.name == 'Ogerpon-Teal-Tera' and not this.effectState.embodied) {
+        this.effectState.embodied = true;
+        this.boost({spe = 1}, pokemon);
+      }
+    },
+    onSwitchIn = function()
+      delete this.effectState.embodied;
+    },
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, notransform = 1},
+    name = "Embody Aspect (Teal)",
+    rating = 3.5,
+    num = 301,
+  },
+  embodyaspectwellspring = {
+    onStart = function(pokemon)
+      if (pokemon.baseSpecies.name == 'Ogerpon-Wellspring-Tera' and not this.effectState.embodied) {
+        this.effectState.embodied = true;
+        this.boost({spd = 1}, pokemon);
+      }
+    },
+    onSwitchIn = function()
+      delete this.effectState.embodied;
+    },
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, notransform = 1},
+    name = "Embody Aspect (Wellspring)",
+    rating = 3.5,
+    num = 302,
+  },
+  emergencyexit = {
+    onEmergencyExit = function(target)
+      if (not this.canSwitch(target.side) or target.forceSwitchFlag or target.switchFlag) return;
+      for (local side of this.sides) {
+        for (local active of side.active) {
+          active.switchFlag = false;
+        }
+      }
+      target.switchFlag = true;
+      this.add('-activate', target, 'ability = Emergency Exit');
+    },
+    flags = {},
+    name = "Emergency Exit",
+    rating = 1,
+    num = 194,
+  },
+  fairyaura = {
+    onStart = function(pokemon)
+      if (this.suppressingAbility(pokemon)) return;
+      this.add('-ability', pokemon, 'Fairy Aura');
+    },
+    onAnyBasePowerPriority = 20,
+    onAnyBasePower = function(basePower, source, target, move)
+      if (target == source or move.category == 'Status' or move.type ~= 'Fairy') return;
+      if (not move.auraBooster?.hasAbility('Fairy Aura')) move.auraBooster = this.effectState.target;
+      if (move.auraBooster ~= this.effectState.target) return;
+      return this.chainModify([move.hasAuraBreak ? 3072  = 5448, 4096]);
+    },
+    flags = {},
+    name = "Fairy Aura",
+    rating = 3,
+    num = 187,
+  },
+  filter = {
+    onSourceModifyDamage = function(damage, source, target, move)
+      if (target.getMoveHitData(move).typeMod > 0) {
+        this.debug('Filter neutralize');
+        return this.chainModify(0.75);
+      }
+    },
+    flags = {breakable = 1},
+    name = "Filter",
+    rating = 3,
+    num = 111,
+  },
+  flamebody = {
+    onDamagingHit = function(damage, target, source, move)
+      if (this.checkMoveMakesContact(move, source, target)) {
+        if (this.randomChance(3, 10)) {
+          source.trySetStatus('brn', target);
+        }
+      }
+    },
+    flags = {},
+    name = "Flame Body",
+    rating = 2,
+    num = 49,
+  },
+  flareboost = {
+    onBasePowerPriority = 19,
+    onBasePower = function(basePower, attacker, defender, move)
+      if (attacker.status == 'brn' and move.category == 'Special') {
+        return this.chainModify(1.5);
+      }
+    },
+    flags = {},
+    name = "Flare Boost",
+    rating = 2,
+    num = 138,
+  },
+  flashfire = {
+    onTryHit = function(target, source, move)
+      if (target ~= source and move.type == 'Fire') {
+        move.accuracy = true;
+        if (not target.addVolatile('flashfire')) {
+          this.add('-immune', target, '[from] ability = Flash Fire');
+        }
+        return null;
+      }
+    },
+    onEnd = function(pokemon)
+      pokemon.removeVolatile('flashfire');
+    },
+    condition = {
+      noCopy = true, -- doesn't get copied by Baton Pass
+      onStart = function(target)
+        this.add('-start', target, 'ability = Flash Fire');
+      },
+      onModifyAtkPriority = 5,
+      onModifyAtk = function(atk, attacker, defender, move)
+        if (move.type == 'Fire' and attacker.hasAbility('flashfire')) {
+          this.debug('Flash Fire boost');
+          return this.chainModify(1.5);
+        }
+      },
+      onModifySpAPriority = 5,
+      onModifySpA = function(atk, attacker, defender, move)
+        if (move.type == 'Fire' and attacker.hasAbility('flashfire')) {
+          this.debug('Flash Fire boost');
+          return this.chainModify(1.5);
+        }
+      },
+      onEnd = function(target)
+        this.add('-end', target, 'ability = Flash Fire', '[silent]');
+      },
+    },
+    flags = {breakable = 1},
+    name = "Flash Fire",
+    rating = 3.5,
+    num = 18,
+  },
+  flowergift = {
+    onStart = function(pokemon)
+      this.singleEvent('WeatherChange', this.effect, this.effectState, pokemon);
+    },
+    onWeatherChange = function(pokemon)
+      if (not pokemon.isActive or pokemon.baseSpecies.baseSpecies ~= 'Cherrim' or pokemon.transformed) return;
+      if (not pokemon.hp) return;
+      if (['sunnyday', 'desolateland'].includes(pokemon.effectiveWeather())) {
+        if (pokemon.species.id ~= 'cherrimsunshine') {
+          pokemon.formeChange('Cherrim-Sunshine', this.effect, false, '[msg]');
+        }
+      } else {
+        if (pokemon.species.id == 'cherrimsunshine') {
+          pokemon.formeChange('Cherrim', this.effect, false, '[msg]');
+        }
+      }
+    },
+    onAllyModifyAtkPriority = 3,
+    onAllyModifyAtk = function(atk, pokemon)
+      if (this.effectState.target.baseSpecies.baseSpecies ~= 'Cherrim') return;
+      if (['sunnyday', 'desolateland'].includes(pokemon.effectiveWeather())) {
+        return this.chainModify(1.5);
+      }
+    },
+    onAllyModifySpDPriority = 4,
+    onAllyModifySpD = function(spd, pokemon)
+      if (this.effectState.target.baseSpecies.baseSpecies ~= 'Cherrim') return;
+      if (['sunnyday', 'desolateland'].includes(pokemon.effectiveWeather())) {
+        return this.chainModify(1.5);
+      }
+    },
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, breakable = 1},
+    name = "Flower Gift",
+    rating = 1,
+    num = 122,
+  },
+  flowerveil = {
+    onAllyTryBoost = function(boost, target, source, effect)
+      if ((source and target == source) or not target.hasType('Grass')) return;
+      local showMsg = false;
+      local i = BoostID;
+      for (i in boost) {
+        if (boost[i]not  < 0) {
+          delete boost[i];
+          showMsg = true;
+        }
+      }
+      if (showMsg and not (effect as ActiveMove).secondaries) {
+        local effectHolder = this.effectState.target;
+        this.add('-block', target, 'ability = Flower Veil', '[of] ' + effectHolder);
+      }
+    },
+    onAllySetStatus = function(status, target, source, effect)
+      if (target.hasType('Grass') and source and target ~= source and effect and effect.id ~= 'yawn') {
+        this.debug('interrupting setStatus with Flower Veil');
+        if (effect.name == 'Synchronize' or (effect.effectType == 'Move' and not effect.secondaries)) {
+          local effectHolder = this.effectState.target;
+          this.add('-block', target, 'ability = Flower Veil', '[of] ' + effectHolder);
+        }
+        return null;
+      }
+    },
+    onAllyTryAddVolatile = function(status, target)
+      if (target.hasType('Grass') and status.id == 'yawn') {
+        this.debug('Flower Veil blocking yawn');
+        local effectHolder = this.effectState.target;
+        this.add('-block', target, 'ability = Flower Veil', '[of] ' + effectHolder);
+        return null;
+      }
+    },
+    flags = {breakable = 1},
+    name = "Flower Veil",
+    rating = 0,
+    num = 166,
+  },
+  fluffy = {
+    onSourceModifyDamage = function(damage, source, target, move)
+      local mod = 1;
+      if (move.type == 'Fire') mod *= 2;
+      if (move.flags['contact']) mod /= 2;
+      return this.chainModify(mod);
+    },
+    flags = {breakable = 1},
+    name = "Fluffy",
+    rating = 3.5,
+    num = 218,
+  },
+  forecast = {
+    onStart = function(pokemon)
+      this.singleEvent('WeatherChange', this.effect, this.effectState, pokemon);
+    },
+    onWeatherChange = function(pokemon)
+      if (pokemon.baseSpecies.baseSpecies ~= 'Castform' or pokemon.transformed) return;
+      local forme = null;
+      switch (pokemon.effectiveWeather()) {
+      case 'sunnyday':
+      case 'desolateland':
+        if (pokemon.species.id ~= 'castformsunny') forme = 'Castform-Sunny';
+        break;
+      case 'raindance':
+      case 'primordialsea':
+        if (pokemon.species.id ~= 'castformrainy') forme = 'Castform-Rainy';
+        break;
+      case 'hail':
+      case 'snow':
+        if (pokemon.species.id ~= 'castformsnowy') forme = 'Castform-Snowy';
+        break;
+      default:
+        if (pokemon.species.id ~= 'castform') forme = 'Castform';
+        break;
+      }
+      if (pokemon.isActive and forme) {
+        pokemon.formeChange(forme, this.effect, false, '[msg]');
+      }
+    },
+    flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1},
+    name = "Forecast",
+    rating = 2,
+    num = 59,
+  },
+  forewarn = {
+    onStart = function(pokemon)
+      local warnMoves = (Move | Pokemon)[][] = [];
+      local warnBp = 1;
+      for (local target of pokemon.foes()) {
+        for (local moveSlot of target.moveSlots) {
+          local move = this.dex.moves.get(moveSlot.move);
+          local bp = move.basePower;
+          if (move.ohko) bp = 150;
+          if (move.id == 'counter' or move.id == 'metalburst' or move.id == 'mirrorcoat') bp = 120;
+          if (bp == 1) bp = 80;
+          if (not bp and move.category ~= 'Status') bp = 80;
+          if (bp > warnBp) {
+            warnMoves = [[move, target]];
+warnBp = bp;
+} else if (bp == warnBp) {
+warnMoves.push([move, target]);
+}
+}
+}
+if (not warnMoves.length) return;
+local [warnMoveName, warnTarget] = this.sample(warnMoves);
+this.add('-activate', pokemon, 'ability = Forewarn', warnMoveName, '[of] ' + warnTarget);
+},
+flags = {},
+name = "Forewarn",
+rating = 0.5,
+num = 108,
+},
+friendguard = {
+onAnyModifyDamage = function(damage, source, target, move)
+if (target ~= this.effectState.target and target.isAlly(this.effectState.target)) {
+this.debug('Friend Guard weaken');
+return this.chainModify(0.75);
+}
+},
+flags = {breakable = 1},
+name = "Friend Guard",
+rating = 0,
+num = 132,
+},
+frisk = {
+onStart = function(pokemon)
+for (local target of pokemon.foes()) {
+if (target.item) {
+this.add('-item', target, target.getItem().name, '[from] ability = Frisk', '[of] ' + pokemon, '[identify]');
+}
+}
+},
+flags = {},
+name = "Frisk",
+rating = 1.5,
+num = 119,
+},
+fullmetalbody = {
+onTryBoost = function(boost, target, source, effect)
+if (source and target == source) return;
+local showMsg = false;
+local i = BoostID;
+for (i in boost) {
+if (boost[i]not  < 0) {
+delete boost[i];
+showMsg = true;
+}
+}
+if (showMsg and not (effect as ActiveMove).secondaries and effect.id ~= 'octolock') {
+this.add("-fail", target, "unboost", "[from] ability = Full Metal Body", "[of] " + target);
+}
+},
+flags = {},
+name = "Full Metal Body",
+rating = 2,
+num = 230,
+},
+furcoat = {
+onModifyDefPriority = 6,
+onModifyDef = function(def)
+return this.chainModify(2);
+},
+flags = {breakable = 1},
+name = "Fur Coat",
+rating = 4,
+num = 169,
+},
+galewings = {
+onModifyPriority = function(priority, pokemon, target, move)
+if (move?.type == 'Flying' and pokemon.hp == pokemon.maxhp) return priority + 1;
+},
+flags = {},
+name = "Gale Wings",
+rating = 1.5,
+num = 177,
+},
+galvanize = {
+onModifyTypePriority = -1,
+onModifyType = function(move, pokemon)
+local noModifyType = [
+'judgment', 'multiattack', 'naturalgift', 'revelationdance', 'technoblast', 'terrainpulse', 'weatherball',
+];
+if (move.type == 'Normal' and not noModifyType.includes(move.id) and
+not (move.isZ and move.category ~= 'Status') and not (move.name == 'Tera Blast' and pokemon.terastallized)) {
+move.type = 'Electric';
+move.typeChangerBoosted = this.effect;
+}
+},
+onBasePowerPriority = 23,
+onBasePower = function(basePower, pokemon, target, move)
+if (move.typeChangerBoosted == this.effect) return this.chainModify([4915, 4096]);
+},
+flags = {},
+name = "Galvanize",
+rating = 4,
+num = 206,
+},
+gluttony = {
+onStart = function(pokemon)
+pokemon.abilityState.gluttony = true;
+},
+onDamage = function(item, pokemon)
+pokemon.abilityState.gluttony = true;
+},
+flags = {},
+name = "Gluttony",
+rating = 1.5,
+num = 82,
+},
+goodasgold = {
+onTryHit = function(target, source, move)
+if (move.category == 'Status' and target ~= source) {
+this.add('-immune', target, '[from] ability = Good as Gold');
+return null;
+}
+},
+flags = {breakable = 1},
+name = "Good as Gold",
+rating = 5,
+num = 283,
+},
+gooey = {
+onDamagingHit = function(damage, target, source, move)
+if (this.checkMoveMakesContact(move, source, target, true)) {
+this.add('-ability', target, 'Gooey');
+this.boost({spe = -1}, source, target, null, true);
+}
+},
+flags = {},
+name = "Gooey",
+rating = 2,
+num = 183,
+},
+gorillatactics = {
+onStart = function(pokemon)
+pokemon.abilityState.choiceLock = "";
+},
+onBeforeMove = function(pokemon, target, move)
+if (move.isZOrMaxPowered or move.id == 'struggle') return;
+if (pokemon.abilityState.choiceLock and pokemon.abilityState.choiceLock ~= move.id) {
+-- Fails unless ability is being ignored (these events will not run), no PP lost.
+this.addMove('move', pokemon, move.name);
+this.attrLastMove('[still]');
+this.debug("Disabled by Gorilla Tactics");
+this.add('-fail', pokemon);
+return false;
+}
+},
+onModifyMove = function(move, pokemon)
+if (pokemon.abilityState.choiceLock or move.isZOrMaxPowered or move.id == 'struggle') return;
+pokemon.abilityState.choiceLock = move.id;
+},
+onModifyAtkPriority = 1,
+onModifyAtk = function(atk, pokemon)
+if (pokemon.volatiles['dynamax']) return;
+-- PLACEHOLDER
+this.debug('Gorilla Tactics Atk Boost');
+return this.chainModify(1.5);
+},
+onDisableMove = function(pokemon)
+if (not pokemon.abilityState.choiceLock) return;
+if (pokemon.volatiles['dynamax']) return;
+for (local moveSlot of pokemon.moveSlots) {
+if (moveSlot.id ~= pokemon.abilityState.choiceLock) {
+pokemon.disableMove(moveSlot.id, false, this.effectState.sourceEffect);
+}
+}
+},
+onEnd = function(pokemon)
+pokemon.abilityState.choiceLock = "";
+},
+flags = {},
+name = "Gorilla Tactics",
+rating = 4.5,
+num = 255,
+},
+grasspelt = {
+onModifyDefPriority = 6,
+onModifyDef = function(pokemon)
+if (this.field.isTerrain('grassyterrain')) return this.chainModify(1.5);
+},
+flags = {breakable = 1},
+name = "Grass Pelt",
+rating = 0.5,
+num = 179,
+},
+grassysurge = {
+onStart = function(source)
+this.field.setTerrain('grassyterrain');
+},
+flags = {},
+name = "Grassy Surge",
+rating = 4,
+num = 229,
+},
+grimneigh = {
+onSourceAfterFaint = function(length, target, source, effect)
+if (effect and effect.effectType == 'Move') {
+this.boost({spa = length}, source);
+}
+},
+flags = {},
+name = "Grim Neigh",
+rating = 3,
+num = 265,
+},
+guarddog = {
+onDragOutPriority = 1,
+onDragOut = function(pokemon)
+this.add('-activate', pokemon, 'ability = Guard Dog');
+return null;
+},
+onTryBoost = function(boost, target, source, effect)
+if (effect.name == 'Intimidate' and boost.atk) {
+delete boost.atk;
+this.boost({atk = 1}, target, target, null, false, true);
+}
+},
+flags = {breakable = 1},
+name = "Guard Dog",
+rating = 2,
+num = 275,
+},
+gulpmissile = {
+onDamagingHit = function(damage, target, source, move)
+if (not source.hp or not source.isActive or target.isSemiInvulnerable()) return;
+if (['cramorantgulping', 'cramorantgorging'].includes(target.species.id)) {
+this.damage(source.baseMaxhp / 4, source, target);
+if (target.species.id == 'cramorantgulping') {
+this.boost({def = -1}, source, target, null, true);
+} else {
+source.trySetStatus('par', target, move);
+}
+target.formeChange('cramorant', move);
+}
+},
+-- The Dive part of this mechanic is implemented in Dive's `onTryMove` in moves.ts
+onSourceTryPrimaryHit = function(target, source, effect)
+if (effect?.id == 'surf' and source.hasAbility('gulpmissile') and source.species.name == 'Cramorant') {
+local forme = source.hp <= source.maxhp / 2 ? 'cramorantgorging'  = 'cramorantgulping';
+source.formeChange(forme, effect);
+}
+},
+flags = {cantsuppress = 1, notransform = 1},
+name = "Gulp Missile",
+rating = 2.5,
+num = 241,
+},
+guts = {
+onModifyAtkPriority = 5,
+onModifyAtk = function(atk, pokemon)
+if (pokemon.status) {
+return this.chainModify(1.5);
+}
+},
+flags = {},
+name = "Guts",
+rating = 3.5,
+num = 62,
+},
+hadronengine = {
+onStart = function(pokemon)
+if (not this.field.setTerrain('electricterrain') and this.field.isTerrain('electricterrain')) {
+this.add('-activate', pokemon, 'ability = Hadron Engine');
+}
+},
+onModifySpAPriority = 5,
+onModifySpA = function(atk, attacker, defender, move)
+if (this.field.isTerrain('electricterrain')) {
+this.debug('Hadron Engine boost');
+return this.chainModify([5461, 4096]);
+}
+},
+flags = {},
+name = "Hadron Engine",
+rating = 4.5,
+num = 289,
+},
+harvest = {
+onResidualOrder = 28,
+onResidualSubOrder = 2,
+onResidual = function(pokemon)
+if (this.field.isWeather(['sunnyday', 'desolateland']) or this.randomChance(1, 2)) {
+if (pokemon.hp and not pokemon.item and this.dex.items.get(pokemon.lastItem).isBerry) {
+pokemon.setItem(pokemon.lastItem);
+pokemon.lastItem = '';
+this.add('-item', pokemon, pokemon.getItem(), '[from] ability = Harvest');
+}
+}
+},
+flags = {},
+name = "Harvest",
+rating = 2.5,
+num = 139,
+},
+healer = {
+onResidualOrder = 5,
+onResidualSubOrder = 3,
+onResidual = function(pokemon)
+for (local allyActive of pokemon.adjacentAllies()) {
+if (allyActive.status and this.randomChance(3, 10)) {
+this.add('-activate', pokemon, 'ability = Healer');
+allyActive.cureStatus();
+}
+}
+},
+flags = {},
+name = "Healer",
+rating = 0,
+num = 131,
+},
+heatproof = {
+onSourceModifyAtkPriority = 6,
+onSourceModifyAtk = function(atk, attacker, defender, move)
+if (move.type == 'Fire') {
+this.debug('Heatproof Atk weaken');
+return this.chainModify(0.5);
+}
+},
+onSourceModifySpAPriority = 5,
+onSourceModifySpA = function(atk, attacker, defender, move)
+if (move.type == 'Fire') {
+this.debug('Heatproof SpA weaken');
+return this.chainModify(0.5);
+}
+},
+onDamage = function(damage, target, source, effect)
+if (effect and effect.id == 'brn') {
+return damage / 2;
+}
+},
+flags = {breakable = 1},
+name = "Heatproof",
+rating = 2,
+num = 85,
+},
+heavymetal = {
+onModifyWeightPriority = 1,
+onModifyWeight = function(weighthg)
+return weighthg * 2;
+},
+flags = {breakable = 1},
+name = "Heavy Metal",
+rating = 0,
+num = 134,
+},
+honeygather = {
+flags = {},
+name = "Honey Gather",
+rating = 0,
+num = 118,
+},
+hospitality = {
+onStart = function(pokemon)
+for (local ally of pokemon.adjacentAllies()) {
+this.heal(ally.baseMaxhp / 4, ally, pokemon);
+}
+},
+flags = {},
+name = "Hospitality",
+rating = 0,
+num = 299,
+},
+hugepower = {
+onModifyAtkPriority = 5,
+onModifyAtk = function(atk)
+return this.chainModify(2);
+},
+flags = {},
+name = "Huge Power",
+rating = 5,
+num = 37,
+},
+hungerswitch = {
+onResidualOrder = 29,
+onResidual = function(pokemon)
+if (pokemon.species.baseSpecies ~= 'Morpeko' or pokemon.terastallized) return;
+local targetForme = pokemon.species.name == 'Morpeko' ? 'Morpeko-Hangry'  = 'Morpeko';
+pokemon.formeChange(targetForme);
+},
+flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, notransform = 1},
+name = "Hunger Switch",
+rating = 1,
+num = 258,
+},
+hustle = {
+-- This should be applied directly to the stat as opposed to chaining with the others
+onModifyAtkPriority = 5,
+onModifyAtk = function(atk)
+return this.modify(atk, 1.5);
+},
+onSourceModifyAccuracyPriority = -1,
+onSourceModifyAccuracy = function(accuracy, target, source, move)
+if (move.category == 'Physical' and typeof accuracy == 'number') {
+return this.chainModify([3277, 4096]);
+}
+},
+flags = {},
+name = "Hustle",
+rating = 3.5,
+num = 55,
+},
+hydration = {
+onResidualOrder = 5,
+onResidualSubOrder = 3,
+onResidual = function(pokemon)
+if (pokemon.status and ['raindance', 'primordialsea'].includes(pokemon.effectiveWeather())) {
+this.debug('hydration');
+this.add('-activate', pokemon, 'ability = Hydration');
+pokemon.cureStatus();
+}
+},
+flags = {},
+name = "Hydration",
+rating = 1.5,
+num = 93,
+},
+hypercutter = {
+onTryBoost = function(boost, target, source, effect)
+if (source and target == source) return;
+if (boost.atk and boost.atk < 0) {
+delete boost.atk;
+if (not (effect as ActiveMove).secondaries) {
+this.add("-fail", target, "unboost", "Attack", "[from] ability = Hyper Cutter", "[of] " + target);
+}
+}
+},
+flags = {breakable = 1},
+name = "Hyper Cutter",
+rating = 1.5,
+num = 52,
+},
+icebody = {
+onWeather = function(target, source, effect)
+if (effect.id == 'hail' or effect.id == 'snow') {
+this.heal(target.baseMaxhp / 16);
+}
+},
+onImmunity = function(type, pokemon)
+if (type == 'hail') return false;
+},
+flags = {},
+name = "Ice Body",
+rating = 1,
+num = 115,
+},
+iceface = {
+onStart = function(pokemon)
+if (this.field.isWeather(['hail', 'snow']) and pokemon.species.id == 'eiscuenoice') {
+this.add('-activate', pokemon, 'ability = Ice Face');
+this.effectState.busted = false;
+pokemon.formeChange('Eiscue', this.effect, true);
+}
+},
+onDamagePriority = 1,
+onDamage = function(damage, target, source, effect)
+if (effect?.effectType == 'Move' and effect.category == 'Physical' and target.species.id == 'eiscue') {
+this.add('-activate', target, 'ability = Ice Face');
+this.effectState.busted = true;
+return 0;
+}
+},
+onCriticalHit = function(target, type, move)
+if (not target) return;
+if (move.category ~= 'Physical' or target.species.id ~= 'eiscue') return;
+if (target.volatiles['substitute'] and not (move.flags['bypasssub'] or move.infiltrates)) return;
+if (not target.runImmunity(move.type)) return;
+return false;
+},
+onEffectiveness = function(typeMod, target, type, move)
+if (not target) return;
+if (move.category ~= 'Physical' or target.species.id ~= 'eiscue') return;
 
-			if (!target.runImmunity(move.type)) return;
-			return 0;
-		},
-		onUpdate = function(pokemon)
-			if (pokemon.species.id === 'eiscue' && this.effectState.busted) {
-				pokemon.formeChange('Eiscue-Noice', this.effect, true);
-			}
-		},
-		onWeatherChange = function(pokemon, source, sourceEffect)
-			-- snow/hail resuming because Cloud Nine/Air Lock ended does not trigger Ice Face
-			if ((sourceEffect as Ability)?.suppressWeather) return;
-			if (!pokemon.hp) return;
-			if (this.field.isWeather(['hail', 'snow']) && pokemon.species.id === 'eiscuenoice') {
-				this.add('-activate', pokemon, 'ability = Ice Face');
-				this.effectState.busted = false;
-				pokemon.formeChange('Eiscue', this.effect, true);
-			}
-		},
-		flags = {
-			failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1,
-			breakable = 1, notransform = 1,
-		},
-		name = "Ice Face",
-		rating = 3,
-		num = 248,
-	},
-	icescales = {
-		onSourceModifyDamage = function(damage, source, target, move)
-			if (move.category === 'Special') {
-				return this.chainModify(0.5);
-			}
-		},
-		flags = {breakable = 1},
-		name = "Ice Scales",
-		rating = 4,
-		num = 246,
-	},
-	illuminate = {
-		onTryBoost = function(boost, target, source, effect)
-			if (source && target === source) return;
-			if (boost.accuracy && boost.accuracy < 0) {
-				delete boost.accuracy;
-				if (!(effect as ActiveMove).secondaries) {
-					this.add("-fail", target, "unboost", "accuracy", "[from] ability = Illuminate", "[of] " + target);
-				}
-			}
-		},
-		onModifyMove = function(move)
-			move.ignoreEvasion = true;
-		},
-		flags = {breakable = 1},
-		name = "Illuminate",
-		rating = 0.5,
-		num = 35,
-	},
-	illusion = {
-		onBeforeSwitchIn = function(pokemon)
-			pokemon.illusion = null;
-			-- yes, you can Illusion an active pokemon but only if it's to your right
-			for (let i = pokemon.side.pokemon.length - 1; i > pokemon.position; i--) {
-				const possibleTarget = pokemon.side.pokemon[i];
-				if (!possibleTarget.fainted) {
-					-- If Ogerpon is in the last slot while the Illusion Pokemon is Terastallized
-					-- Illusion will not disguise as anything
-					if (!pokemon.terastallized || possibleTarget.species.baseSpecies !== 'Ogerpon') {
-						pokemon.illusion = possibleTarget;
-					}
-					break;
-				}
-			}
-		},
-		onDamagingHit = function(damage, target, source, move)
-			if (target.illusion) {
-				this.singleEvent('End', this.dex.abilities.get('Illusion'), target.abilityState, target, source, move);
-			}
-		},
-		onEnd = function(pokemon)
-			if (pokemon.illusion) {
-				this.debug('illusion cleared');
-				pokemon.illusion = null;
-				const details = pokemon.species.name + (pokemon.level === 100 ? ''  = ', L' + pokemon.level) +
-					(pokemon.gender === '' ? ''  = ', ' + pokemon.gender) + (pokemon.set.shiny ? ', shiny'  = '');
-				this.add('replace', pokemon, details);
-				this.add('-end', pokemon, 'Illusion');
-				if (this.ruleTable.has('illusionlevelmod')) {
-					this.hint("Illusion Level Mod is active, so this Pok\u00e9mon's true level was hidden.", true);
-				}
-			}
-		},
-		onFaint = function(pokemon)
-			pokemon.illusion = null;
-		},
-		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1},
-		name = "Illusion",
-		rating = 4.5,
-		num = 149,
-	},
-	immunity = {
-		onUpdate = function(pokemon)
-			if (pokemon.status === 'psn' || pokemon.status === 'tox') {
-				this.add('-activate', pokemon, 'ability = Immunity');
-				pokemon.cureStatus();
-			}
-		},
-		onSetStatus = function(status, target, source, effect)
-			if (status.id !== 'psn' && status.id !== 'tox') return;
-			if ((effect as Move)?.status) {
-				this.add('-immune', target, '[from] ability = Immunity');
-			}
-			return false;
-		},
-		flags = {breakable = 1},
-		name = "Immunity",
-		rating = 2,
-		num = 17,
+local hitSub = target.volatiles['substitute'] and not move.flags['bypasssub'] and not (move.infiltrates and this.gen >= 6);
+if (hitSub) return;
+
+if (not target.runImmunity(move.type)) return;
+return 0;
+},
+onUpdate = function(pokemon)
+if (pokemon.species.id == 'eiscue' and this.effectState.busted) {
+pokemon.formeChange('Eiscue-Noice', this.effect, true);
+}
+},
+onWeatherChange = function(pokemon, source, sourceEffect)
+-- snow/hail resuming because Cloud Nine/Air Lock ended does not trigger Ice Face
+if ((sourceEffect as Ability)?.suppressWeather) return;
+if (not pokemon.hp) return;
+if (this.field.isWeather(['hail', 'snow']) and pokemon.species.id == 'eiscuenoice') {
+this.add('-activate', pokemon, 'ability = Ice Face');
+this.effectState.busted = false;
+pokemon.formeChange('Eiscue', this.effect, true);
+}
+},
+flags = {
+failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1,
+breakable = 1, notransform = 1,
+},
+name = "Ice Face",
+rating = 3,
+num = 248,
+},
+icescales = {
+onSourceModifyDamage = function(damage, source, target, move)
+if (move.category == 'Special') {
+return this.chainModify(0.5);
+}
+},
+flags = {breakable = 1},
+name = "Ice Scales",
+rating = 4,
+num = 246,
+},
+illuminate = {
+onTryBoost = function(boost, target, source, effect)
+if (source and target == source) return;
+if (boost.accuracy and boost.accuracy < 0) {
+delete boost.accuracy;
+if (not (effect as ActiveMove).secondaries) {
+this.add("-fail", target, "unboost", "accuracy", "[from] ability = Illuminate", "[of] " + target);
+}
+}
+},
+onModifyMove = function(move)
+move.ignoreEvasion = true;
+},
+flags = {breakable = 1},
+name = "Illuminate",
+rating = 0.5,
+num = 35,
+},
+illusion = {
+onBeforeSwitchIn = function(pokemon)
+pokemon.illusion = null;
+-- yes, you can Illusion an active pokemon but only if it's to your right
+for (local i = pokemon.side.pokemon.length - 1; i > pokemon.position; i--) {
+local possibleTarget = pokemon.side.pokemon[i];
+if (not possibleTarget.fainted) {
+-- If Ogerpon is in the last slot while the Illusion Pokemon is Terastallized
+-- Illusion will not disguise as anything
+if (not pokemon.terastallized or possibleTarget.species.baseSpecies ~= 'Ogerpon') {
+pokemon.illusion = possibleTarget;
+}
+break;
+}
+}
+},
+onDamagingHit = function(damage, target, source, move)
+if (target.illusion) {
+this.singleEvent('End', this.dex.abilities.get('Illusion'), target.abilityState, target, source, move);
+}
+},
+onEnd = function(pokemon)
+if (pokemon.illusion) {
+this.debug('illusion cleared');
+pokemon.illusion = null;
+local details = pokemon.species.name + (pokemon.level == 100 ? ''  = ', L' + pokemon.level) +
+(pokemon.gender == '' ? ''  = ', ' + pokemon.gender) + (pokemon.set.shiny ? ', shiny'  = '');
+this.add('replace', pokemon, details);
+this.add('-end', pokemon, 'Illusion');
+if (this.ruleTable.has('illusionlevelmod')) {
+this.hint("Illusion Level Mod is active, so this Pok\u00e9mon's true level was hidden.", true);
+}
+}
+},
+onFaint = function(pokemon)
+pokemon.illusion = null;
+},
+flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1},
+name = "Illusion",
+rating = 4.5,
+num = 149,
+},
+immunity = {
+onUpdate = function(pokemon)
+if (pokemon.status == 'psn' or pokemon.status == 'tox') {
+this.add('-activate', pokemon, 'ability = Immunity');
+pokemon.cureStatus();
+}
+},
+onSetStatus = function(status, target, source, effect)
+if (status.id ~= 'psn' and status.id ~= 'tox') return;
+if ((effect as Move)?.status) {
+this.add('-immune', target, '[from] ability = Immunity');
+}
+return false;
+},
+flags = {breakable = 1},
+name = "Immunity",
+rating = 2,
+    num = 17,
 	},
 	imposter = {
 		onSwitchIn = function(pokemon)
@@ -2058,11 +2064,11 @@ local Abilities = {
 		},
 		onStart = function(pokemon)
 			-- Imposter does not activate when Skill Swapped or when Neutralizing Gas leaves the field
-			if (!this.effectState.switchingIn) return;
+			if (not this.effectState.switchingIn) return;
 			-- copies across in doubles/triples
 			-- (also copies across in multibattle and diagonally in free-for-all,
 			-- but side.foe already takes care of those)
-			const target = pokemon.side.foe.active[pokemon.side.foe.active.length - 1 - pokemon.position];
+			local target = pokemon.side.foe.active[pokemon.side.foe.active.length - 1 - pokemon.position];
 			if (target) {
 				pokemon.transformInto(target, this.dex.abilities.get('imposter'));
 			}
@@ -2085,7 +2091,7 @@ local Abilities = {
 	innardsout = {
 		onDamagingHitOrder = 1,
 		onDamagingHit = function(damage, target, source, move)
-			if (!target.hp) {
+			if (not target.hp) {
 				this.damage(target.getUndynamaxedHP(damage), source, target);
 			}
 		},
@@ -2096,10 +2102,10 @@ local Abilities = {
 	},
 	innerfocus = {
 		onTryAddVolatile = function(status, pokemon)
-			if (status.id === 'flinch') return null;
+			if (status.id == 'flinch') return null;
 		},
 		onTryBoost = function(boost, target, source, effect)
-			if (effect.name === 'Intimidate' && boost.atk) {
+			if (effect.name == 'Intimidate' and boost.atk) {
 				delete boost.atk;
 				this.add('-fail', target, 'unboost', 'Attack', '[from] ability = Inner Focus', '[of] ' + target);
 			}
@@ -2111,20 +2117,20 @@ local Abilities = {
 	},
 	insomnia = {
 		onUpdate = function(pokemon)
-			if (pokemon.status === 'slp') {
+			if (pokemon.status == 'slp') {
 				this.add('-activate', pokemon, 'ability = Insomnia');
 				pokemon.cureStatus();
 			}
 		},
 		onSetStatus = function(status, target, source, effect)
-			if (status.id !== 'slp') return;
+			if (status.id ~= 'slp') return;
 			if ((effect as Move)?.status) {
 				this.add('-immune', target, '[from] ability = Insomnia');
 			}
 			return false;
 		},
 		onTryAddVolatile = function(status, target)
-			if (status.id === 'yawn') {
+			if (status.id == 'yawn') {
 				this.add('-immune', target, '[from] ability = Insomnia');
 				return null;
 			}
@@ -2136,9 +2142,9 @@ local Abilities = {
 	},
 	intimidate = {
 		onStart = function(pokemon)
-			let activated = false;
-			for (const target of pokemon.adjacentFoes()) {
-				if (!activated) {
+			local activated = false;
+			for (local target of pokemon.adjacentFoes()) {
+				if (not activated) {
 					this.add('-ability', pokemon, 'Intimidate', 'boost');
 					activated = true;
 				}
@@ -2192,7 +2198,7 @@ local Abilities = {
 	},
 	justified = {
 		onDamagingHit = function(damage, target, source, move)
-			if (move.type === 'Dark') {
+			if (move.type == 'Dark') {
 				this.boost({atk = 1});
 			}
 		},
@@ -2203,10 +2209,10 @@ local Abilities = {
 	},
 	keeneye = {
 		onTryBoost = function(boost, target, source, effect)
-			if (source && target === source) return;
-			if (boost.accuracy && boost.accuracy < 0) {
+			if (source and target == source) return;
+			if (boost.accuracy and boost.accuracy < 0) {
 				delete boost.accuracy;
-				if (!(effect as ActiveMove).secondaries) {
+				if (not (effect as ActiveMove).secondaries) {
 					this.add("-fail", target, "unboost", "accuracy", "[from] ability = Keen Eye", "[of] " + target);
 				}
 			}
@@ -2239,7 +2245,7 @@ local Abilities = {
 			}
 		},
 		onTryAddVolatile = function(status, target)
-			if (status.id === 'yawn' && ['sunnyday', 'desolateland'].includes(target.effectiveWeather())) {
+			if (status.id == 'yawn' and ['sunnyday', 'desolateland'].includes(target.effectiveWeather())) {
 				this.add('-immune', target, '[from] ability = Leaf Guard');
 				return null;
 			}
@@ -2259,10 +2265,10 @@ local Abilities = {
 	libero = {
 		onPrepareHit = function(source, target, move)
 			if (this.effectState.libero) return;
-			if (move.hasBounced || move.flags['futuremove'] || move.sourceEffect === 'snatch') return;
-			const type = move.type;
-			if (type && type !== '???' && source.getTypes().join() !== type) {
-				if (!source.setType(type)) return;
+			if (move.hasBounced or move.flags['futuremove'] or move.sourceEffect == 'snatch') return;
+			local type = move.type;
+			if (type and type ~= '???' and source.getTypes().join() ~= type) {
+				if (not source.setType(type)) return;
 				this.effectState.libero = true;
 				this.add('-start', source, 'typechange', type, '[from] ability = Libero');
 			}
@@ -2286,19 +2292,19 @@ local Abilities = {
 	},
 	lightningrod = {
 		onTryHit = function(target, source, move)
-			if (target !== source && move.type === 'Electric') {
-				if (!this.boost({spa = 1})) {
+			if (target ~= source and move.type == 'Electric') {
+				if (not this.boost({spa = 1})) {
 					this.add('-immune', target, '[from] ability = Lightning Rod');
 				}
 				return null;
 			}
 		},
 		onAnyRedirectTarget = function(target, source, source2, move)
-			if (move.type !== 'Electric' || move.flags['pledgecombo']) return;
-			const redirectTarget = ['randomNormal', 'adjacentFoe'].includes(move.target) ? 'normal'  = move.target;
+			if (move.type ~= 'Electric' or move.flags['pledgecombo']) return;
+			local redirectTarget = ['randomNormal', 'adjacentFoe'].includes(move.target) ? 'normal'  = move.target;
 			if (this.validTarget(this.effectState.target, source, redirectTarget)) {
 				if (move.smartTarget) move.smartTarget = false;
-				if (this.effectState.target !== target) {
+				if (this.effectState.target ~= target) {
 					this.add('-activate', this.effectState.target, 'ability = Lightning Rod');
 				}
 				return this.effectState.target;
@@ -2311,13 +2317,13 @@ local Abilities = {
 	},
 	limber = {
 		onUpdate = function(pokemon)
-			if (pokemon.status === 'par') {
+			if (pokemon.status == 'par') {
 				this.add('-activate', pokemon, 'ability = Limber');
 				pokemon.cureStatus();
 			}
 		},
 		onSetStatus = function(status, target, source, effect)
-			if (status.id !== 'par') return;
+			if (status.id ~= 'par') return;
 			if ((effect as Move)?.status) {
 				this.add('-immune', target, '[from] ability = Limber');
 			}
@@ -2330,12 +2336,12 @@ local Abilities = {
 	},
 	lingeringaroma = {
 		onDamagingHit = function(damage, target, source, move)
-			const sourceAbility = source.getAbility();
-			if (sourceAbility.flags['cantsuppress'] || sourceAbility.id === 'lingeringaroma') {
+			local sourceAbility = source.getAbility();
+			if (sourceAbility.flags['cantsuppress'] or sourceAbility.id == 'lingeringaroma') {
 				return;
 			}
-			if (this.checkMoveMakesContact(move, source, target, !source.isAlly(target))) {
-				const oldAbility = source.setAbility('lingeringaroma', target);
+			if (this.checkMoveMakesContact(move, source, target, not source.isAlly(target))) {
+				local oldAbility = source.setAbility('lingeringaroma', target);
 				if (oldAbility) {
 					this.add('-activate', target, 'ability = Lingering Aroma', this.dex.abilities.get(oldAbility).name, '[of] ' + source);
 				}
@@ -2349,7 +2355,7 @@ local Abilities = {
 	liquidooze = {
 		onSourceTryHeal = function(damage, target, source, effect)
 			this.debug("Heal is occurring = " + target + " <- " + source + " : = " + effect.id);
-			const canOoze = ['drain', 'leechseed', 'strengthsap'];
+			local canOoze = ['drain', 'leechseed', 'strengthsap'];
 			if (canOoze.includes(effect.id)) {
 				this.damage(damage);
 				return 0;
@@ -2363,7 +2369,7 @@ local Abilities = {
 	liquidvoice = {
 		onModifyTypePriority = -1,
 		onModifyType = function(move, pokemon)
-			if (move.flags['sound'] && !pokemon.volatiles['dynamax']) { -- hardcode
+			if (move.flags['sound'] and not pokemon.volatiles['dynamax']) { -- hardcode
 				move.type = 'Water';
 			}
 		},
@@ -2384,20 +2390,20 @@ local Abilities = {
 	magicbounce = {
 		onTryHitPriority = 1,
 		onTryHit = function(target, source, move)
-			if (target === source || move.hasBounced || !move.flags['reflectable']) {
+			if (target == source or move.hasBounced or not move.flags['reflectable']) {
 				return;
 			}
-			const newMove = this.dex.getActiveMove(move.id);
+			local newMove = this.dex.getActiveMove(move.id);
 			newMove.hasBounced = true;
 			newMove.pranksterBoosted = false;
 			this.actions.useMove(newMove, target, source);
 			return null;
 		},
 		onAllyTryHitSide = function(target, source, move)
-			if (target.isAlly(source) || move.hasBounced || !move.flags['reflectable']) {
+			if (target.isAlly(source) or move.hasBounced or not move.flags['reflectable']) {
 				return;
 			}
-			const newMove = this.dex.getActiveMove(move.id);
+			local newMove = this.dex.getActiveMove(move.id);
 			newMove.hasBounced = true;
 			newMove.pranksterBoosted = false;
 			this.actions.useMove(newMove, this.effectState.target, source);
@@ -2413,8 +2419,8 @@ local Abilities = {
 	},
 	magicguard = {
 		onDamage = function(damage, target, source, effect)
-			if (effect.effectType !== 'Move') {
-				if (effect.effectType === 'Ability') this.add('-activate', source, 'ability = ' + effect.name);
+			if (effect.effectType ~= 'Move') {
+				if (effect.effectType == 'Ability') this.add('-activate', source, 'ability = ' + effect.name);
 				return false;
 			}
 		},
@@ -2425,12 +2431,12 @@ local Abilities = {
 	},
 	magician = {
 		onAfterMoveSecondarySelf = function(source, target, move)
-			if (!move || !target || source.switchFlag === true) return;
-			if (target !== source && move.category !== 'Status') {
-				if (source.item || source.volatiles['gem'] || move.id === 'fling') return;
-				const yourItem = target.takeItem(source);
-				if (!yourItem) return;
-				if (!source.setItem(yourItem)) {
+			if (not move or not target or source.switchFlag == true) return;
+			if (target ~= source and move.category ~= 'Status') {
+				if (source.item or source.volatiles['gem'] or move.id == 'fling') return;
+				local yourItem = target.takeItem(source);
+				if (not yourItem) return;
+				if (not source.setItem(yourItem)) {
 					target.item = yourItem.id; -- bypass setItem so we don't break choicelock or anything
 					return;
 				}
@@ -2444,13 +2450,13 @@ local Abilities = {
 	},
 	magmaarmor = {
 		onUpdate = function(pokemon)
-			if (pokemon.status === 'frz') {
+			if (pokemon.status == 'frz') {
 				this.add('-activate', pokemon, 'ability = Magma Armor');
 				pokemon.cureStatus();
 			}
 		},
 		onImmunity = function(type, pokemon)
-			if (type === 'frz') return false;
+			if (type == 'frz') return false;
 		},
 		flags = {breakable = 1},
 		name = "Magma Armor",
@@ -2459,14 +2465,14 @@ local Abilities = {
 	},
 	magnetpull = {
 		onFoeTrapPokemon = function(pokemon)
-			if (pokemon.hasType('Steel') && pokemon.isAdjacent(this.effectState.target)) {
+			if (pokemon.hasType('Steel') and pokemon.isAdjacent(this.effectState.target)) {
 				pokemon.tryTrap(true);
 			}
 		},
 		onFoeMaybeTrapPokemon = function(pokemon, source)
-			if (!source) source = this.effectState.target;
-			if (!source || !pokemon.isAdjacent(source)) return;
-			if (!pokemon.knownType || pokemon.hasType('Steel')) {
+			if (not source) source = this.effectState.target;
+			if (not source or not pokemon.isAdjacent(source)) return;
+			if (not pokemon.knownType or pokemon.hasType('Steel')) {
 				pokemon.maybeTrapped = true;
 			}
 		},
@@ -2501,7 +2507,7 @@ local Abilities = {
 	},
 	merciless = {
 		onModifyCritRatio = function(critRatio, source, target)
-			if (target && ['psn', 'tox'].includes(target.status)) return 5;
+			if (target and ['psn', 'tox'].includes(target.status)) return 5;
 		},
 		flags = {},
 		name = "Merciless",
@@ -2513,7 +2519,7 @@ local Abilities = {
 			this.singleEvent('TerrainChange', this.effect, this.effectState, pokemon);
 		},
 		onTerrainChange = function(pokemon)
-			let types;
+			local types;
 			switch (this.field.terrain) {
 			case 'electricterrain':
 				types = ['Electric'];
@@ -2530,11 +2536,11 @@ local Abilities = {
 			default:
 				types = pokemon.baseSpecies.types;
 			}
-			const oldTypes = pokemon.getTypes();
-			if (oldTypes.join() === types.join() || !pokemon.setType(types)) return;
-			if (this.field.terrain || pokemon.transformed) {
+			local oldTypes = pokemon.getTypes();
+			if (oldTypes.join() == types.join() or not pokemon.setType(types)) return;
+			if (this.field.terrain or pokemon.transformed) {
 				this.add('-start', pokemon, 'typechange', types.join('/'), '[from] ability = Mimicry');
-				if (!this.field.terrain) this.hint("Transform Mimicry changes you to your original un-transformed types.");
+				if (not this.field.terrain) this.hint("Transform Mimicry changes you to your original un-transformed types.");
 			} else {
 				this.add('-activate', pokemon, 'ability = Mimicry');
 				this.add('-end', pokemon, 'typechange', '[silent]');
@@ -2547,10 +2553,10 @@ local Abilities = {
 	},
 	mindseye = {
 		onTryBoost = function(boost, target, source, effect)
-			if (source && target === source) return;
-			if (boost.accuracy && boost.accuracy < 0) {
+			if (source and target == source) return;
+			if (boost.accuracy and boost.accuracy < 0) {
 				delete boost.accuracy;
-				if (!(effect as ActiveMove).secondaries) {
+				if (not (effect as ActiveMove).secondaries) {
 					this.add("-fail", target, "unboost", "accuracy", "[from] ability = Mind's Eye", "[of] " + target);
 				}
 			}
@@ -2558,8 +2564,8 @@ local Abilities = {
 		onModifyMovePriority = -5,
 		onModifyMove = function(move)
 			move.ignoreEvasion = true;
-			if (!move.ignoreImmunity) move.ignoreImmunity = {};
-			if (move.ignoreImmunity !== true) {
+			if (not move.ignoreImmunity) move.ignoreImmunity = {};
+			if (move.ignoreImmunity ~= true) {
 				move.ignoreImmunity['Fighting'] = true;
 				move.ignoreImmunity['Normal'] = true;
 			}
@@ -2572,7 +2578,7 @@ local Abilities = {
 	minus = {
 		onModifySpAPriority = 5,
 		onModifySpA = function(spa, pokemon)
-			for (const allyActive of pokemon.allies()) {
+			for (local allyActive of pokemon.allies()) {
 				if (allyActive.hasAbility(['minus', 'plus'])) {
 					return this.chainModify(1.5);
 				}
@@ -2586,12 +2592,12 @@ local Abilities = {
 	mirrorarmor = {
 		onTryBoost = function(boost, target, source, effect)
 			-- Don't bounce self stat changes, or boosts that have already bounced
-			if (!source || target === source || !boost || effect.name === 'Mirror Armor') return;
-			let b = BoostID;
+			if (not source or target == source or not boost or effect.name == 'Mirror Armor') return;
+			local b = BoostID;
 			for (b in boost) {
-				if (boost[b]! < 0) {
-					if (target.boosts[b] === -6) continue;
-					const negativeBoost = SparseBoostsTable = {};
+				if (boost[b]not  < 0) {
+					if (target.boosts[b] == -6) continue;
+					local negativeBoost = SparseBoostsTable = {};
 					negativeBoost[b] = boost[b];
 					delete boost[b];
 					if (source.hp) {
@@ -2631,23 +2637,23 @@ local Abilities = {
 		onResidualOrder = 28,
 		onResidualSubOrder = 2,
 		onResidual = function(pokemon)
-			let stats = BoostID[] = [];
-			const boost = SparseBoostsTable = {};
-			let statPlus = BoostID;
+			local stats = BoostID[] = [];
+			local boost = SparseBoostsTable = {};
+			local statPlus = BoostID;
 			for (statPlus in pokemon.boosts) {
-				if (statPlus === 'accuracy' || statPlus === 'evasion') continue;
+				if (statPlus == 'accuracy' or statPlus == 'evasion') continue;
 				if (pokemon.boosts[statPlus] < 6) {
 					stats.push(statPlus);
 				}
 			}
-			let randomStat = BoostID | undefined = stats.length ? this.sample(stats)  = undefined;
+			local randomStat = BoostID | undefined = stats.length ? this.sample(stats)  = undefined;
 			if (randomStat) boost[randomStat] = 2;
 
 			stats = [];
-			let statMinus = BoostID;
+			local statMinus = BoostID;
 			for (statMinus in pokemon.boosts) {
-				if (statMinus === 'accuracy' || statMinus === 'evasion') continue;
-				if (pokemon.boosts[statMinus] > -6 && statMinus !== randomStat) {
+				if (statMinus == 'accuracy' or statMinus == 'evasion') continue;
+				if (pokemon.boosts[statMinus] > -6 and statMinus ~= randomStat) {
 					stats.push(statMinus);
 				}
 			}
@@ -2663,8 +2669,8 @@ local Abilities = {
 	},
 	motordrive = {
 		onTryHit = function(target, source, move)
-			if (target !== source && move.type === 'Electric') {
-				if (!this.boost({spe = 1})) {
+			if (target ~= source and move.type == 'Electric') {
+				if (not this.boost({spe = 1})) {
 					this.add('-immune', target, '[from] ability = Motor Drive');
 				}
 				return null;
@@ -2677,7 +2683,7 @@ local Abilities = {
 	},
 	moxie = {
 		onSourceAfterFaint = function(length, target, source, effect)
-			if (effect && effect.effectType === 'Move') {
+			if (effect and effect.effectType == 'Move') {
 				this.boost({atk = length}, source);
 			}
 		},
@@ -2707,12 +2713,12 @@ local Abilities = {
 	},
 	mummy = {
 		onDamagingHit = function(damage, target, source, move)
-			const sourceAbility = source.getAbility();
-			if (sourceAbility.flags['cantsuppress'] || sourceAbility.id === 'mummy') {
+			local sourceAbility = source.getAbility();
+			if (sourceAbility.flags['cantsuppress'] or sourceAbility.id == 'mummy') {
 				return;
 			}
-			if (this.checkMoveMakesContact(move, source, target, !source.isAlly(target))) {
-				const oldAbility = source.setAbility('mummy', target);
+			if (this.checkMoveMakesContact(move, source, target, not source.isAlly(target))) {
+				local oldAbility = source.setAbility('mummy', target);
 				if (oldAbility) {
 					this.add('-activate', target, 'ability = Mummy', this.dex.abilities.get(oldAbility).name, '[of] ' + source);
 				}
@@ -2726,12 +2732,12 @@ local Abilities = {
 	myceliummight = {
 		onFractionalPriorityPriority = -1,
 		onFractionalPriority = function(priority, pokemon, target, move)
-			if (move.category === 'Status') {
+			if (move.category == 'Status') {
 				return -0.1;
 			}
 		},
 		onModifyMove = function(move)
-			if (move.category === 'Status') {
+			if (move.category == 'Status') {
 				move.ignoreAbility = true;
 			}
 		},
@@ -2747,14 +2753,14 @@ local Abilities = {
 			-- since you can see how many of your opponent's pokemon are statused.
 			-- The only ambiguous situation happens in Doubles/Triples, where multiple pokemon
 			-- that could have Natural Cure switch out, but only some of them get cured.
-			if (pokemon.side.active.length === 1) return;
-			if (pokemon.showCure === true || pokemon.showCure === false) return;
+			if (pokemon.side.active.length == 1) return;
+			if (pokemon.showCure == true or pokemon.showCure == false) return;
 
-			const cureList = [];
-			let noCureCount = 0;
-			for (const curPoke of pokemon.side.active) {
+			local cureList = [];
+			local noCureCount = 0;
+			for (local curPoke of pokemon.side.active) {
 				-- pokemon not statused
-				if (!curPoke?.status) {
+				if (not curPoke?.status) {
 					-- this.add('-message', "" + curPoke + " skipped = not statused or doesn't exist");
 					continue;
 				}
@@ -2762,19 +2768,19 @@ local Abilities = {
 					-- this.add('-message', "" + curPoke + " skipped = Natural Cure already known");
 					continue;
 				}
-				const species = curPoke.species;
+				local species = curPoke.species;
 				-- pokemon can't get Natural Cure
-				if (!Object.values(species.abilities).includes('Natural Cure')) {
+				if (not Object.values(species.abilities).includes('Natural Cure')) {
 					-- this.add('-message', "" + curPoke + " skipped = no Natural Cure");
 					continue;
 				}
 				-- pokemon's ability is known to be Natural Cure
-				if (!species.abilities['1'] && !species.abilities['H']) {
+				if (not species.abilities['1'] and not species.abilities['H']) {
 					-- this.add('-message', "" + curPoke + " skipped = only one ability");
 					continue;
 				}
 				-- pokemon isn't switching this turn
-				if (curPoke !== pokemon && !this.queue.willSwitch(curPoke)) {
+				if (curPoke ~= pokemon and not this.queue.willSwitch(curPoke)) {
 					-- this.add('-message', "" + curPoke + " skipped = not switching");
 					continue;
 				}
@@ -2788,35 +2794,35 @@ local Abilities = {
 				}
 			}
 
-			if (!cureList.length || !noCureCount) {
+			if (not cureList.length or not noCureCount) {
 				-- It's possible to know what pokemon were cured
-				for (const pkmn of cureList) {
+				for (local pkmn of cureList) {
 					pkmn.showCure = true;
 				}
 			} else {
 				-- It's not possible to know what pokemon were cured
 
 				-- Unlike a -hint, this is real information that battlers need, so we use a -message
-				this.add('-message', "(" + cureList.length + " of " + pokemon.side.name + "'s pokemon " + (cureList.length === 1 ? "was"  = "were") + " cured by Natural Cure.)");
+				this.add('-message', "(" + cureList.length + " of " + pokemon.side.name + "'s pokemon " + (cureList.length == 1 ? "was"  = "were") + " cured by Natural Cure.)");
 
-				for (const pkmn of cureList) {
+				for (local pkmn of cureList) {
 					pkmn.showCure = false;
 				}
 			}
 		},
 		onSwitchOut = function(pokemon)
-			if (!pokemon.status) return;
+			if (not pokemon.status) return;
 
 			-- if pokemon.showCure is undefined, it was skipped because its ability
 			-- is known
-			if (pokemon.showCure === undefined) pokemon.showCure = true;
+			if (pokemon.showCure == undefined) pokemon.showCure = true;
 
 			if (pokemon.showCure) this.add('-curestatus', pokemon, pokemon.status, '[from] ability = Natural Cure');
 			pokemon.clearStatus();
 
 			-- only reset .showCure if it's false
 			-- (once you know a Pokemon has Natural Cure, its cures are always known)
-			if (!pokemon.showCure) pokemon.showCure = undefined;
+			if (not pokemon.showCure) pokemon.showCure = undefined;
 		},
 		flags = {},
 		name = "Natural Cure",
@@ -2825,7 +2831,7 @@ local Abilities = {
 	},
 	neuroforce = {
 		onModifyDamage = function(damage, source, target, move)
-			if (move && target.getMoveHitData(move).typeMod > 0) {
+			if (move and target.getMoveHitData(move).typeMod > 0) {
 				return this.chainModify([5120, 4096]);
 			}
 		},
@@ -2839,8 +2845,8 @@ local Abilities = {
 		onPreStart = function(pokemon)
 			this.add('-ability', pokemon, 'Neutralizing Gas');
 			pokemon.abilityState.ending = false;
-			const strongWeathers = ['desolateland', 'primordialsea', 'deltastream'];
-			for (const target of this.getAllActive()) {
+			local strongWeathers = ['desolateland', 'primordialsea', 'deltastream'];
+			for (local target of this.getAllActive()) {
 				if (target.hasItem('Ability Shield')) {
 					this.add('-block', target, 'item = Ability Shield');
 					continue;
@@ -2863,8 +2869,8 @@ local Abilities = {
 		},
 		onEnd = function(source)
 			if (source.transformed) return;
-			for (const pokemon of this.getAllActive()) {
-				if (pokemon !== source && pokemon.hasAbility('Neutralizing Gas')) {
+			for (local pokemon of this.getAllActive()) {
+				if (pokemon ~= source and pokemon.hasAbility('Neutralizing Gas')) {
 					return;
 				}
 			}
@@ -2878,16 +2884,16 @@ local Abilities = {
 			-- Mark this pokemon's ability as ending so Pokemon#ignoringAbility skips it
 			if (source.abilityState.ending) return;
 			source.abilityState.ending = true;
-			const sortedActive = this.getAllActive();
+			local sortedActive = this.getAllActive();
 			this.speedSort(sortedActive);
-			for (const pokemon of sortedActive) {
-				if (pokemon !== source) {
+			for (local pokemon of sortedActive) {
+				if (pokemon ~= source) {
 					if (pokemon.getAbility().flags['cantsuppress']) continue; -- does not interact with e.g Ice Face, Zen Mode
 					if (pokemon.hasItem('abilityshield')) continue; -- don't restart abilities that weren't suppressed
 
 					-- Will be suppressed by Pokemon#ignoringAbility if needed
 					this.singleEvent('Start', pokemon.getAbility(), pokemon.abilityState, pokemon);
-					if (pokemon.ability === "gluttony") {
+					if (pokemon.ability == "gluttony") {
 						pokemon.abilityState.gluttony = false;
 					}
 				}
@@ -2901,10 +2907,10 @@ local Abilities = {
 	noguard = {
 		onAnyInvulnerabilityPriority = 1,
 		onAnyInvulnerability = function(target, source, move)
-			if (move && (source === this.effectState.target || target === this.effectState.target)) return 0;
+			if (move and (source == this.effectState.target or target == this.effectState.target)) return 0;
 		},
 		onAnyAccuracy = function(accuracy, target, source, move)
-			if (move && (source === this.effectState.target || target === this.effectState.target)) {
+			if (move and (source == this.effectState.target or target == this.effectState.target)) {
 				return true;
 			}
 			return accuracy;
@@ -2917,19 +2923,19 @@ local Abilities = {
 	normalize = {
 		onModifyTypePriority = 1,
 		onModifyType = function(move, pokemon)
-			const noModifyType = [
+			local noModifyType = [
 				'hiddenpower', 'judgment', 'multiattack', 'naturalgift', 'revelationdance', 'struggle', 'technoblast', 'terrainpulse', 'weatherball',
 			];
-			if (!(move.isZ && move.category !== 'Status') && !noModifyType.includes(move.id) &&
+			if (not (move.isZ and move.category ~= 'Status') and not noModifyType.includes(move.id) and
 				-- TODO = Figure out actual interaction
-				!(move.name === 'Tera Blast' && pokemon.terastallized)) {
+				not (move.name == 'Tera Blast' and pokemon.terastallized)) {
 				move.type = 'Normal';
 				move.typeChangerBoosted = this.effect;
 			}
 		},
 		onBasePowerPriority = 23,
 		onBasePower = function(basePower, pokemon, target, move)
-			if (move.typeChangerBoosted === this.effect) return this.chainModify([4915, 4096]);
+			if (move.typeChangerBoosted == this.effect) return this.chainModify([4915, 4096]);
 		},
 		flags = {},
 		name = "Normalize",
@@ -2950,16 +2956,16 @@ local Abilities = {
 			}
 		},
 		onImmunity = function(type, pokemon)
-			if (type === 'attract') return false;
+			if (type == 'attract') return false;
 		},
 		onTryHit = function(pokemon, target, move)
-			if (move.id === 'attract' || move.id === 'captivate' || move.id === 'taunt') {
+			if (move.id == 'attract' or move.id == 'captivate' or move.id == 'taunt') {
 				this.add('-immune', pokemon, '[from] ability = Oblivious');
 				return null;
 			}
 		},
 		onTryBoost = function(boost, target, source, effect)
-			if (effect.name === 'Intimidate' && boost.atk) {
+			if (effect.name == 'Intimidate' and boost.atk) {
 				delete boost.atk;
 				this.add('-fail', target, 'unboost', 'Attack', '[from] ability = Oblivious', '[of] ' + target);
 			}
@@ -2971,12 +2977,12 @@ local Abilities = {
 	},
 	opportunist = {
 		onFoeAfterBoost = function(boost, target, source, effect)
-			if (effect?.name === 'Opportunist' || effect?.name === 'Mirror Herb') return;
-			const pokemon = this.effectState.target;
-			const positiveBoosts = Partial<BoostsTable> = {};
-			let i = BoostID;
+			if (effect?.name == 'Opportunist' or effect?.name == 'Mirror Herb') return;
+			local pokemon = this.effectState.target;
+			local positiveBoosts = Partial<BoostsTable> = {};
+			local i = BoostID;
 			for (i in boost) {
-				if (boost[i]! > 0) {
+				if (boost[i]not  > 0) {
 					positiveBoosts[i] = boost[i];
 				}
 			}
@@ -3010,11 +3016,11 @@ local Abilities = {
 	},
 	overcoat = {
 		onImmunity = function(type, pokemon)
-			if (type === 'sandstorm' || type === 'hail' || type === 'powder') return false;
+			if (type == 'sandstorm' or type == 'hail' or type == 'powder') return false;
 		},
 		onTryHitPriority = 1,
 		onTryHit = function(target, source, move)
-			if (move.flags['powder'] && target !== source && this.dex.getImmunity('powder', target)) {
+			if (move.flags['powder'] and target ~= source and this.dex.getImmunity('powder', target)) {
 				this.add('-immune', target, '[from] ability = Overcoat');
 				return null;
 			}
@@ -3027,14 +3033,14 @@ local Abilities = {
 	overgrow = {
 		onModifyAtkPriority = 5,
 		onModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Grass' && attacker.hp <= attacker.maxhp / 3) {
+			if (move.type == 'Grass' and attacker.hp <= attacker.maxhp / 3) {
 				this.debug('Overgrow boost');
 				return this.chainModify(1.5);
 			}
 		},
 		onModifySpAPriority = 5,
 		onModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Grass' && attacker.hp <= attacker.maxhp / 3) {
+			if (move.type == 'Grass' and attacker.hp <= attacker.maxhp / 3) {
 				this.debug('Overgrow boost');
 				return this.chainModify(1.5);
 			}
@@ -3052,15 +3058,15 @@ local Abilities = {
 			}
 		},
 		onTryAddVolatile = function(status, pokemon)
-			if (status.id === 'confusion') return null;
+			if (status.id == 'confusion') return null;
 		},
 		onHit = function(target, source, move)
-			if (move?.volatileStatus === 'confusion') {
+			if (move?.volatileStatus == 'confusion') {
 				this.add('-immune', target, 'confusion', '[from] ability = Own Tempo');
 			}
 		},
 		onTryBoost = function(boost, target, source, effect)
-			if (effect.name === 'Intimidate' && boost.atk) {
+			if (effect.name == 'Intimidate' and boost.atk) {
 				delete boost.atk;
 				this.add('-fail', target, 'unboost', 'Attack', '[from] ability = Own Tempo', '[of] ' + target);
 			}
@@ -3072,16 +3078,16 @@ local Abilities = {
 	},
 	parentalbond = {
 		onPrepareHit = function(source, target, move)
-			if (move.category === 'Status' || move.multihit || move.flags['noparentalbond'] || move.flags['charge'] ||
-			move.flags['futuremove'] || move.spreadHit || move.isZ || move.isMax) return;
+			if (move.category == 'Status' or move.multihit or move.flags['noparentalbond'] or move.flags['charge'] or
+			move.flags['futuremove'] or move.spreadHit or move.isZ or move.isMax) return;
 			move.multihit = 2;
 			move.multihitType = 'parentalbond';
 		},
 		-- Damage modifier implemented in BattleActions#modifyDamage()
 		onSourceModifySecondaries = function(secondaries, target, source, move)
-			if (move.multihitType === 'parentalbond' && move.id === 'secretpower' && move.hit < 2) {
+			if (move.multihitType == 'parentalbond' and move.id == 'secretpower' and move.hit < 2) {
 				-- hack to prevent accidentally suppressing King's Rock/Razor Fang
-				return secondaries.filter(effect => effect.volatileStatus === 'flinch');
+				return secondaries.filter(effect => effect.volatileStatus == 'flinch');
 			}
 		},
 		flags = {},
@@ -3091,7 +3097,7 @@ local Abilities = {
 	},
 	pastelveil = {
 		onStart = function(pokemon)
-			for (const ally of pokemon.alliesAndSelf()) {
+			for (local ally of pokemon.alliesAndSelf()) {
 				if (['psn', 'tox'].includes(ally.status)) {
 					this.add('-activate', pokemon, 'ability = Pastel Veil');
 					ally.cureStatus();
@@ -3111,16 +3117,16 @@ local Abilities = {
 			}
 		},
 		onSetStatus = function(status, target, source, effect)
-			if (!['psn', 'tox'].includes(status.id)) return;
+			if (not ['psn', 'tox'].includes(status.id)) return;
 			if ((effect as Move)?.status) {
 				this.add('-immune', target, '[from] ability = Pastel Veil');
 			}
 			return false;
 		},
 		onAllySetStatus = function(status, target, source, effect)
-			if (!['psn', 'tox'].includes(status.id)) return;
+			if (not ['psn', 'tox'].includes(status.id)) return;
 			if ((effect as Move)?.status) {
-				const effectHolder = this.effectState.target;
+				local effectHolder = this.effectState.target;
 				this.add('-block', target, 'ability = Pastel Veil', '[of] ' + effectHolder);
 			}
 			return false;
@@ -3132,12 +3138,12 @@ local Abilities = {
 	},
 	perishbody = {
 		onDamagingHit = function(damage, target, source, move)
-			if (!this.checkMoveMakesContact(move, source, target)) return;
+			if (not this.checkMoveMakesContact(move, source, target)) return;
 
-			let announced = false;
-			for (const pokemon of [target, source]) {
+			local announced = false;
+			for (local pokemon of [target, source]) {
 				if (pokemon.volatiles['perishsong']) continue;
-				if (!announced) {
+				if (not announced) {
 					this.add('-ability', target, 'Perish Body');
 					announced = true;
 				}
@@ -3151,15 +3157,15 @@ local Abilities = {
 	},
 	pickpocket = {
 		onAfterMoveSecondary = function(target, source, move)
-			if (source && source !== target && move?.flags['contact']) {
-				if (target.item || target.switchFlag || target.forceSwitchFlag || source.switchFlag === true) {
+			if (source and source ~= target and move?.flags['contact']) {
+				if (target.item or target.switchFlag or target.forceSwitchFlag or source.switchFlag == true) {
 					return;
 				}
-				const yourItem = source.takeItem(target);
-				if (!yourItem) {
+				local yourItem = source.takeItem(target);
+				if (not yourItem) {
 					return;
 				}
-				if (!target.setItem(yourItem)) {
+				if (not target.setItem(yourItem)) {
 					source.item = yourItem.id;
 					return;
 				}
@@ -3177,12 +3183,12 @@ local Abilities = {
 		onResidualSubOrder = 2,
 		onResidual = function(pokemon)
 			if (pokemon.item) return;
-			const pickupTargets = this.getAllActive().filter(target => (
-				target.lastItem && target.usedItemThisTurn && pokemon.isAdjacent(target)
+			local pickupTargets = this.getAllActive().filter(target => (
+				target.lastItem and target.usedItemThisTurn and pokemon.isAdjacent(target)
 			));
-			if (!pickupTargets.length) return;
-			const randomTarget = this.sample(pickupTargets);
-			const item = randomTarget.lastItem;
+			if (not pickupTargets.length) return;
+			local randomTarget = this.sample(pickupTargets);
+			local item = randomTarget.lastItem;
 			randomTarget.lastItem = '';
 			this.add('-item', pokemon, this.dex.items.get(item), '[from] ability = Pickup');
 			pokemon.setItem(item);
@@ -3195,18 +3201,18 @@ local Abilities = {
 	pixilate = {
 		onModifyTypePriority = -1,
 		onModifyType = function(move, pokemon)
-			const noModifyType = [
+			local noModifyType = [
 				'judgment', 'multiattack', 'naturalgift', 'revelationdance', 'technoblast', 'terrainpulse', 'weatherball',
 			];
-			if (move.type === 'Normal' && !noModifyType.includes(move.id) &&
-				!(move.isZ && move.category !== 'Status') && !(move.name === 'Tera Blast' && pokemon.terastallized)) {
+			if (move.type == 'Normal' and not noModifyType.includes(move.id) and
+				not (move.isZ and move.category ~= 'Status') and not (move.name == 'Tera Blast' and pokemon.terastallized)) {
 				move.type = 'Fairy';
 				move.typeChangerBoosted = this.effect;
 			}
 		},
 		onBasePowerPriority = 23,
 		onBasePower = function(basePower, pokemon, target, move)
-			if (move.typeChangerBoosted === this.effect) return this.chainModify([4915, 4096]);
+			if (move.typeChangerBoosted == this.effect) return this.chainModify([4915, 4096]);
 		},
 		flags = {},
 		name = "Pixilate",
@@ -3216,7 +3222,7 @@ local Abilities = {
 	plus = {
 		onModifySpAPriority = 5,
 		onModifySpA = function(spa, pokemon)
-			for (const allyActive of pokemon.allies()) {
+			for (local allyActive of pokemon.allies()) {
 				if (allyActive.hasAbility(['minus', 'plus'])) {
 					return this.chainModify(1.5);
 				}
@@ -3230,7 +3236,7 @@ local Abilities = {
 	poisonheal = {
 		onDamagePriority = 1,
 		onDamage = function(damage, target, source, effect)
-			if (effect.id === 'psn' || effect.id === 'tox') {
+			if (effect.id == 'psn' or effect.id == 'tox') {
 				this.heal(target.baseMaxhp / 8);
 				return false;
 			}
@@ -3255,9 +3261,9 @@ local Abilities = {
 	},
 	poisonpuppeteer = {
 		onAnyAfterSetStatus = function(status, target, source, effect)
-			if (source.baseSpecies.name !== "Pecharunt") return;
-			if (source !== this.effectState.target || target === source || effect.effectType !== 'Move') return;
-			if (status.id === 'psn' || status.id === 'tox') {
+			if (source.baseSpecies.name ~= "Pecharunt") return;
+			if (source ~= this.effectState.target or target == source or effect.effectType ~= 'Move') return;
+			if (status.id == 'psn' or status.id == 'tox') {
 				target.addVolatile('confusion');
 			}
 		},
@@ -3269,7 +3275,7 @@ local Abilities = {
 	poisontouch = {
 		onSourceDamagingHit = function(damage, target, source, move)
 			-- Despite not being a secondary, Shield Dust / Covert Cloak block Poison Touch's effect
-			if (target.hasAbility('shielddust') || target.hasItem('covertcloak')) return;
+			if (target.hasAbility('shielddust') or target.hasItem('covertcloak')) return;
 			if (this.checkMoveMakesContact(move, target, source)) {
 				if (this.randomChance(3, 10)) {
 					target.trySetStatus('psn', source);
@@ -3281,31 +3287,31 @@ local Abilities = {
 		rating = 2,
 		num = 143,
 	},
-	powerconstruct = {
+	powerlocalruct = {
 		onResidualOrder = 29,
 		onResidual = function(pokemon)
-			if (pokemon.baseSpecies.baseSpecies !== 'Zygarde' || pokemon.transformed || !pokemon.hp) return;
-			if (pokemon.species.id === 'zygardecomplete' || pokemon.hp > pokemon.maxhp / 2) return;
-			this.add('-activate', pokemon, 'ability = Power Construct');
+			if (pokemon.baseSpecies.baseSpecies ~= 'Zygarde' or pokemon.transformed or not pokemon.hp) return;
+			if (pokemon.species.id == 'zygardecomplete' or pokemon.hp > pokemon.maxhp / 2) return;
+			this.add('-activate', pokemon, 'ability = Power localruct');
 			pokemon.formeChange('Zygarde-Complete', this.effect, true);
 			pokemon.baseMaxhp = Math.floor(Math.floor(
 				2 * pokemon.species.baseStats['hp'] + pokemon.set.ivs['hp'] + Math.floor(pokemon.set.evs['hp'] / 4) + 100
 			) * pokemon.level / 100 + 10);
-			const newMaxHP = pokemon.volatiles['dynamax'] ? (2 * pokemon.baseMaxhp)  = pokemon.baseMaxhp;
+			local newMaxHP = pokemon.volatiles['dynamax'] ? (2 * pokemon.baseMaxhp)  = pokemon.baseMaxhp;
 			pokemon.hp = newMaxHP - (pokemon.maxhp - pokemon.hp);
 			pokemon.maxhp = newMaxHP;
 			this.add('-heal', pokemon, pokemon.getHealth, '[silent]');
 		},
 		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
-		name = "Power Construct",
+		name = "Power localruct",
 		rating = 5,
 		num = 211,
 	},
 	powerofalchemy = {
 		onAllyFaint = function(target)
-			if (!this.effectState.target.hp) return;
-			const ability = target.getAbility();
-			if (ability.flags['noreceiver'] || ability.id === 'noability') return;
+			if (not this.effectState.target.hp) return;
+			local ability = target.getAbility();
+			if (ability.flags['noreceiver'] or ability.id == 'noability') return;
 			if (this.effectState.target.setAbility(ability)) {
 				this.add('-ability', this.effectState.target, ability, '[from] ability = Power of Alchemy', '[of] ' + target);
 			}
@@ -3318,7 +3324,7 @@ local Abilities = {
 	powerspot = {
 		onAllyBasePowerPriority = 22,
 		onAllyBasePower = function(basePower, attacker, defender, move)
-			if (attacker !== this.effectState.target) {
+			if (attacker ~= this.effectState.target) {
 				this.debug('Power Spot boost');
 				return this.chainModify([5325, 4096]);
 			}
@@ -3330,7 +3336,7 @@ local Abilities = {
 	},
 	prankster = {
 		onModifyPriority = function(priority, pokemon, target, move)
-			if (move?.category === 'Status') {
+			if (move?.category == 'Status') {
 				move.pranksterBoosted = true;
 				return priority + 1;
 			}
@@ -3358,13 +3364,13 @@ local Abilities = {
 			this.field.setWeather('primordialsea');
 		},
 		onAnySetWeather = function(target, source, weather)
-			const strongWeathers = ['desolateland', 'primordialsea', 'deltastream'];
-			if (this.field.getWeather().id === 'primordialsea' && !strongWeathers.includes(weather.id)) return false;
+			local strongWeathers = ['desolateland', 'primordialsea', 'deltastream'];
+			if (this.field.getWeather().id == 'primordialsea' and not strongWeathers.includes(weather.id)) return false;
 		},
 		onEnd = function(pokemon)
-			if (this.field.weatherState.source !== pokemon) return;
-			for (const target of this.getAllActive()) {
-				if (target === pokemon) continue;
+			if (this.field.weatherState.source ~= pokemon) return;
+			for (local target of this.getAllActive()) {
+				if (target == pokemon) continue;
 				if (target.hasAbility('primordialsea')) {
 					this.field.weatherState.source = target;
 					return;
@@ -3393,7 +3399,7 @@ local Abilities = {
 		onModifyMovePriority = 1,
 		onModifyMove = function(move)
 			-- most of the implementation is in Battle#getTarget
-			move.tracksTarget = move.target !== 'scripted';
+			move.tracksTarget = move.target ~= 'scripted';
 		},
 		flags = {},
 		name = "Propeller Tail",
@@ -3403,10 +3409,10 @@ local Abilities = {
 	protean = {
 		onPrepareHit = function(source, target, move)
 			if (this.effectState.protean) return;
-			if (move.hasBounced || move.flags['futuremove'] || move.sourceEffect === 'snatch') return;
-			const type = move.type;
-			if (type && type !== '???' && source.getTypes().join() !== type) {
-				if (!source.setType(type)) return;
+			if (move.hasBounced or move.flags['futuremove'] or move.sourceEffect == 'snatch') return;
+			local type = move.type;
+			if (type and type ~= '???' and source.getTypes().join() ~= type) {
+				if (not source.setType(type)) return;
 				this.effectState.protean = true;
 				this.add('-start', source, 'typechange', type, '[from] ability = Protean');
 			}
@@ -3427,7 +3433,7 @@ local Abilities = {
 			-- Protosynthesis is not affected by Utility Umbrella
 			if (this.field.isWeather('sunnyday')) {
 				pokemon.addVolatile('protosynthesis');
-			} else if (!pokemon.volatiles['protosynthesis']?.fromBooster && this.field.weather !== 'sunnyday') {
+			} else if (not pokemon.volatiles['protosynthesis']?.fromBooster and this.field.weather ~= 'sunnyday') {
 				-- Protosynthesis will not deactivite if Sun is suppressed, hence the direct ID check (isWeather respects supression)
 				pokemon.removeVolatile('protosynthesis');
 			}
@@ -3439,7 +3445,7 @@ local Abilities = {
 		condition = {
 			noCopy = true,
 			onStart = function(pokemon, source, effect)
-				if (effect?.name === 'Booster Energy') {
+				if (effect?.name == 'Booster Energy') {
 					this.effectState.fromBooster = true;
 					this.add('-activate', pokemon, 'ability = Protosynthesis', '[fromitem]');
 				} else {
@@ -3450,30 +3456,30 @@ local Abilities = {
 			},
 			onModifyAtkPriority = 5,
 			onModifyAtk = function(atk, pokemon)
-				if (this.effectState.bestStat !== 'atk' || pokemon.ignoringAbility()) return;
+				if (this.effectState.bestStat ~= 'atk' or pokemon.ignoringAbility()) return;
 				this.debug('Protosynthesis atk boost');
 				return this.chainModify([5325, 4096]);
 			},
 			onModifyDefPriority = 6,
 			onModifyDef = function(def, pokemon)
-				if (this.effectState.bestStat !== 'def' || pokemon.ignoringAbility()) return;
+				if (this.effectState.bestStat ~= 'def' or pokemon.ignoringAbility()) return;
 				this.debug('Protosynthesis def boost');
 				return this.chainModify([5325, 4096]);
 			},
 			onModifySpAPriority = 5,
 			onModifySpA = function(spa, pokemon)
-				if (this.effectState.bestStat !== 'spa' || pokemon.ignoringAbility()) return;
+				if (this.effectState.bestStat ~= 'spa' or pokemon.ignoringAbility()) return;
 				this.debug('Protosynthesis spa boost');
 				return this.chainModify([5325, 4096]);
 			},
 			onModifySpDPriority = 6,
 			onModifySpD = function(spd, pokemon)
-				if (this.effectState.bestStat !== 'spd' || pokemon.ignoringAbility()) return;
+				if (this.effectState.bestStat ~= 'spd' or pokemon.ignoringAbility()) return;
 				this.debug('Protosynthesis spd boost');
 				return this.chainModify([5325, 4096]);
 			},
 			onModifySpe = function(spe, pokemon)
-				if (this.effectState.bestStat !== 'spe' || pokemon.ignoringAbility()) return;
+				if (this.effectState.bestStat ~= 'spe' or pokemon.ignoringAbility()) return;
 				this.debug('Protosynthesis spe boost');
 				return this.chainModify(1.5);
 			},
@@ -3532,21 +3538,21 @@ local Abilities = {
 			return false;
 		},
 		onTryAddVolatile = function(status, target)
-			if (status.id === 'yawn') {
+			if (status.id == 'yawn') {
 				this.add('-immune', target, '[from] ability = Purifying Salt');
 				return null;
 			}
 		},
 		onSourceModifyAtkPriority = 6,
 		onSourceModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Ghost') {
+			if (move.type == 'Ghost') {
 				this.debug('Purifying Salt weaken');
 				return this.chainModify(0.5);
 			}
 		},
 		onSourceModifySpAPriority = 5,
 		onSourceModifySpA = function(spa, attacker, defender, move)
-			if (move.type === 'Ghost') {
+			if (move.type == 'Ghost') {
 				this.debug('Purifying Salt weaken');
 				return this.chainModify(0.5);
 			}
@@ -3563,7 +3569,7 @@ local Abilities = {
 		onTerrainChange = function(pokemon)
 			if (this.field.isTerrain('electricterrain')) {
 				pokemon.addVolatile('quarkdrive');
-			} else if (!pokemon.volatiles['quarkdrive']?.fromBooster) {
+			} else if (not pokemon.volatiles['quarkdrive']?.fromBooster) {
 				pokemon.removeVolatile('quarkdrive');
 			}
 		},
@@ -3574,7 +3580,7 @@ local Abilities = {
 		condition = {
 			noCopy = true,
 			onStart = function(pokemon, source, effect)
-				if (effect?.name === 'Booster Energy') {
+				if (effect?.name == 'Booster Energy') {
 					this.effectState.fromBooster = true;
 					this.add('-activate', pokemon, 'ability = Quark Drive', '[fromitem]');
 				} else {
@@ -3585,30 +3591,30 @@ local Abilities = {
 			},
 			onModifyAtkPriority = 5,
 			onModifyAtk = function(atk, pokemon)
-				if (this.effectState.bestStat !== 'atk' || pokemon.ignoringAbility()) return;
+				if (this.effectState.bestStat ~= 'atk' or pokemon.ignoringAbility()) return;
 				this.debug('Quark Drive atk boost');
 				return this.chainModify([5325, 4096]);
 			},
 			onModifyDefPriority = 6,
 			onModifyDef = function(def, pokemon)
-				if (this.effectState.bestStat !== 'def' || pokemon.ignoringAbility()) return;
+				if (this.effectState.bestStat ~= 'def' or pokemon.ignoringAbility()) return;
 				this.debug('Quark Drive def boost');
 				return this.chainModify([5325, 4096]);
 			},
 			onModifySpAPriority = 5,
 			onModifySpA = function(spa, pokemon)
-				if (this.effectState.bestStat !== 'spa' || pokemon.ignoringAbility()) return;
+				if (this.effectState.bestStat ~= 'spa' or pokemon.ignoringAbility()) return;
 				this.debug('Quark Drive spa boost');
 				return this.chainModify([5325, 4096]);
 			},
 			onModifySpDPriority = 6,
 			onModifySpD = function(spd, pokemon)
-				if (this.effectState.bestStat !== 'spd' || pokemon.ignoringAbility()) return;
+				if (this.effectState.bestStat ~= 'spd' or pokemon.ignoringAbility()) return;
 				this.debug('Quark Drive spd boost');
 				return this.chainModify([5325, 4096]);
 			},
 			onModifySpe = function(spe, pokemon)
-				if (this.effectState.bestStat !== 'spe' || pokemon.ignoringAbility()) return;
+				if (this.effectState.bestStat ~= 'spe' or pokemon.ignoringAbility()) return;
 				this.debug('Quark Drive spe boost');
 				return this.chainModify(1.5);
 			},
@@ -3623,13 +3629,13 @@ local Abilities = {
 	},
 	queenlymajesty = {
 		onFoeTryMove = function(target, source, move)
-			const targetAllExceptions = ['perishsong', 'flowershield', 'rototiller'];
-			if (move.target === 'foeSide' || (move.target === 'all' && !targetAllExceptions.includes(move.id))) {
+			local targetAllExceptions = ['perishsong', 'flowershield', 'rototiller'];
+			if (move.target == 'foeSide' or (move.target == 'all' and not targetAllExceptions.includes(move.id))) {
 				return;
 			}
 
-			const dazzlingHolder = this.effectState.target;
-			if ((source.isAlly(dazzlingHolder) || move.target === 'all') && move.priority > 0.1) {
+			local dazzlingHolder = this.effectState.target;
+			if ((source.isAlly(dazzlingHolder) or move.target == 'all') and move.priority > 0.1) {
 				this.attrLastMove('[still]');
 				this.add('cant', dazzlingHolder, 'ability = Queenly Majesty', move, '[of] ' + target);
 				return false;
@@ -3643,7 +3649,7 @@ local Abilities = {
 	quickdraw = {
 		onFractionalPriorityPriority = -1,
 		onFractionalPriority = function(priority, pokemon, target, move)
-			if (move.category !== "Status" && this.randomChance(3, 10)) {
+			if (move.category ~= "Status" and this.randomChance(3, 10)) {
 				this.add('-activate', pokemon, 'ability = Quick Draw');
 				return 0.1;
 			}
@@ -3667,7 +3673,7 @@ local Abilities = {
 	raindish = {
 		onWeather = function(target, source, effect)
 			if (target.hasItem('utilityumbrella')) return;
-			if (effect.id === 'raindance' || effect.id === 'primordialsea') {
+			if (effect.id == 'raindance' or effect.id == 'primordialsea') {
 				this.heal(target.baseMaxhp / 16);
 			}
 		},
@@ -3683,7 +3689,7 @@ local Abilities = {
 			}
 		},
 		onAfterBoost = function(boost, target, source, effect)
-			if (effect?.name === 'Intimidate' && boost.atk) {
+			if (effect?.name == 'Intimidate' and boost.atk) {
 				this.boost({spe = 1});
 			}
 		},
@@ -3694,9 +3700,9 @@ local Abilities = {
 	},
 	receiver = {
 		onAllyFaint = function(target)
-			if (!this.effectState.target.hp) return;
-			const ability = target.getAbility();
-			if (ability.flags['noreceiver'] || ability.id === 'noability') return;
+			if (not this.effectState.target.hp) return;
+			local ability = target.getAbility();
+			if (ability.flags['noreceiver'] or ability.id == 'noability') return;
 			if (this.effectState.target.setAbility(ability)) {
 				this.add('-ability', this.effectState.target, ability, '[from] ability = Receiver', '[of] ' + target);
 			}
@@ -3709,7 +3715,7 @@ local Abilities = {
 	reckless = {
 		onBasePowerPriority = 23,
 		onBasePower = function(basePower, attacker, defender, move)
-			if (move.recoil || move.hasCrashDamage) {
+			if (move.recoil or move.hasCrashDamage) {
 				this.debug('Reckless boost');
 				return this.chainModify([4915, 4096]);
 			}
@@ -3722,18 +3728,18 @@ local Abilities = {
 	refrigerate = {
 		onModifyTypePriority = -1,
 		onModifyType = function(move, pokemon)
-			const noModifyType = [
+			local noModifyType = [
 				'judgment', 'multiattack', 'naturalgift', 'revelationdance', 'technoblast', 'terrainpulse', 'weatherball',
 			];
-			if (move.type === 'Normal' && !noModifyType.includes(move.id) &&
-				!(move.isZ && move.category !== 'Status') && !(move.name === 'Tera Blast' && pokemon.terastallized)) {
+			if (move.type == 'Normal' and not noModifyType.includes(move.id) and
+				not (move.isZ and move.category ~= 'Status') and not (move.name == 'Tera Blast' and pokemon.terastallized)) {
 				move.type = 'Ice';
 				move.typeChangerBoosted = this.effect;
 			}
 		},
 		onBasePowerPriority = 23,
 		onBasePower = function(basePower, pokemon, target, move)
-			if (move.typeChangerBoosted === this.effect) return this.chainModify([4915, 4096]);
+			if (move.typeChangerBoosted == this.effect) return this.chainModify([4915, 4096]);
 		},
 		flags = {},
 		name = "Refrigerate",
@@ -3751,17 +3757,17 @@ local Abilities = {
 	},
 	ripen = {
 		onTryHeal = function(damage, target, source, effect)
-			if (!effect) return;
-			if (effect.name === 'Berry Juice' || effect.name === 'Leftovers') {
+			if (not effect) return;
+			if (effect.name == 'Berry Juice' or effect.name == 'Leftovers') {
 				this.add('-activate', target, 'ability = Ripen');
 			}
 			if ((effect as Item).isBerry) return this.chainModify(2);
 		},
 		onChangeBoost = function(boost, target, source, effect)
-			if (effect && (effect as Item).isBerry) {
-				let b = BoostID;
+			if (effect and (effect as Item).isBerry) {
+				local b = BoostID;
 				for (b in boost) {
-					boost[b]! *= 2;
+					boost[b]not  *= 2;
 				}
 			}
 		},
@@ -3777,7 +3783,7 @@ local Abilities = {
 			this.add('-activate', pokemon, 'ability = Ripen');
 		},
 		onEatItem = function(item, pokemon)
-			const weakenBerries = [
+			local weakenBerries = [
 				'Babiri Berry', 'Charti Berry', 'Chilan Berry', 'Chople Berry', 'Coba Berry', 'Colbur Berry', 'Haban Berry', 'Kasib Berry', 'Kebia Berry', 'Occa Berry', 'Passho Berry', 'Payapa Berry', 'Rindo Berry', 'Roseli Berry', 'Shuca Berry', 'Tanga Berry', 'Wacan Berry', 'Yache Berry',
 			];
 			-- Record if the pokemon ate a berry to resist the attack
@@ -3791,8 +3797,8 @@ local Abilities = {
 	rivalry = {
 		onBasePowerPriority = 24,
 		onBasePower = function(basePower, attacker, defender, move)
-			if (attacker.gender && defender.gender) {
-				if (attacker.gender === defender.gender) {
+			if (attacker.gender and defender.gender) {
+				if (attacker.gender == defender.gender) {
 					this.debug('Rivalry boost');
 					return this.chainModify(1.25);
 				} else {
@@ -3815,9 +3821,9 @@ local Abilities = {
 	},
 	rockhead = {
 		onDamage = function(damage, target, source, effect)
-			if (effect.id === 'recoil') {
-				if (!this.activeMove) throw new Error("Battle.activeMove is null");
-				if (this.activeMove.id !== 'struggle') return null;
+			if (effect.id == 'recoil') {
+				if (not this.activeMove) throw new Error("Battle.activeMove is null");
+				if (this.activeMove.id ~= 'struggle') return null;
 			}
 		},
 		flags = {},
@@ -3828,14 +3834,14 @@ local Abilities = {
 	rockypayload = {
 		onModifyAtkPriority = 5,
 		onModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Rock') {
+			if (move.type == 'Rock') {
 				this.debug('Rocky Payload boost');
 				return this.chainModify(1.5);
 			}
 		},
 		onModifySpAPriority = 5,
 		onModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Rock') {
+			if (move.type == 'Rock') {
 				this.debug('Rocky Payload boost');
 				return this.chainModify(1.5);
 			}
@@ -3867,14 +3873,14 @@ local Abilities = {
 		onBasePowerPriority = 21,
 		onBasePower = function(basePower, attacker, defender, move)
 			if (this.field.isWeather('sandstorm')) {
-				if (move.type === 'Rock' || move.type === 'Ground' || move.type === 'Steel') {
+				if (move.type == 'Rock' or move.type == 'Ground' or move.type == 'Steel') {
 					this.debug('Sand Force boost');
 					return this.chainModify([5325, 4096]);
 				}
 			}
 		},
 		onImmunity = function(type, pokemon)
-			if (type === 'sandstorm') return false;
+			if (type == 'sandstorm') return false;
 		},
 		flags = {},
 		name = "Sand Force",
@@ -3888,7 +3894,7 @@ local Abilities = {
 			}
 		},
 		onImmunity = function(type, pokemon)
-			if (type === 'sandstorm') return false;
+			if (type == 'sandstorm') return false;
 		},
 		flags = {},
 		name = "Sand Rush",
@@ -3915,11 +3921,11 @@ local Abilities = {
 	},
 	sandveil = {
 		onImmunity = function(type, pokemon)
-			if (type === 'sandstorm') return false;
+			if (type == 'sandstorm') return false;
 		},
 		onModifyAccuracyPriority = -1,
 		onModifyAccuracy = function(accuracy)
-			if (typeof accuracy !== 'number') return;
+			if (typeof accuracy ~= 'number') return;
 			if (this.field.isWeather('sandstorm')) {
 				this.debug('Sand Veil - decreasing accuracy');
 				return this.chainModify([3277, 4096]);
@@ -3933,16 +3939,16 @@ local Abilities = {
 	sapsipper = {
 		onTryHitPriority = 1,
 		onTryHit = function(target, source, move)
-			if (target !== source && move.type === 'Grass') {
-				if (!this.boost({atk = 1})) {
+			if (target ~= source and move.type == 'Grass') {
+				if (not this.boost({atk = 1})) {
 					this.add('-immune', target, '[from] ability = Sap Sipper');
 				}
 				return null;
 			}
 		},
 		onAllyTryHitSide = function(target, source, move)
-			if (source === this.effectState.target || !target.isAlly(source)) return;
-			if (move.type === 'Grass') {
+			if (source == this.effectState.target or not target.isAlly(source)) return;
+			if (move.type == 'Grass') {
 				this.boost({atk = 1}, this.effectState.target);
 			}
 		},
@@ -3953,13 +3959,13 @@ local Abilities = {
 	},
 	schooling = {
 		onStart = function(pokemon)
-			if (pokemon.baseSpecies.baseSpecies !== 'Wishiwashi' || pokemon.level < 20 || pokemon.transformed) return;
+			if (pokemon.baseSpecies.baseSpecies ~= 'Wishiwashi' or pokemon.level < 20 or pokemon.transformed) return;
 			if (pokemon.hp > pokemon.maxhp / 4) {
-				if (pokemon.species.id === 'wishiwashi') {
+				if (pokemon.species.id == 'wishiwashi') {
 					pokemon.formeChange('Wishiwashi-School');
 				}
 			} else {
-				if (pokemon.species.id === 'wishiwashischool') {
+				if (pokemon.species.id == 'wishiwashischool') {
 					pokemon.formeChange('Wishiwashi');
 				}
 			}
@@ -3967,15 +3973,15 @@ local Abilities = {
 		onResidualOrder = 29,
 		onResidual = function(pokemon)
 			if (
-				pokemon.baseSpecies.baseSpecies !== 'Wishiwashi' || pokemon.level < 20 ||
-				pokemon.transformed || !pokemon.hp
+				pokemon.baseSpecies.baseSpecies ~= 'Wishiwashi' or pokemon.level < 20 or
+				pokemon.transformed or not pokemon.hp
 			) return;
 			if (pokemon.hp > pokemon.maxhp / 4) {
-				if (pokemon.species.id === 'wishiwashi') {
+				if (pokemon.species.id == 'wishiwashi') {
 					pokemon.formeChange('Wishiwashi-School');
 				}
 			} else {
-				if (pokemon.species.id === 'wishiwashischool') {
+				if (pokemon.species.id == 'wishiwashischool') {
 					pokemon.formeChange('Wishiwashi');
 				}
 			}
@@ -3988,14 +3994,14 @@ local Abilities = {
 	scrappy = {
 		onModifyMovePriority = -5,
 		onModifyMove = function(move)
-			if (!move.ignoreImmunity) move.ignoreImmunity = {};
-			if (move.ignoreImmunity !== true) {
+			if (not move.ignoreImmunity) move.ignoreImmunity = {};
+			if (move.ignoreImmunity ~= true) {
 				move.ignoreImmunity['Fighting'] = true;
 				move.ignoreImmunity['Normal'] = true;
 			}
 		},
 		onTryBoost = function(boost, target, source, effect)
-			if (effect.name === 'Intimidate' && boost.atk) {
+			if (effect.name == 'Intimidate' and boost.atk) {
 				delete boost.atk;
 				this.add('-fail', target, 'unboost', 'Attack', '[from] ability = Scrappy', '[of] ' + target);
 			}
@@ -4007,11 +4013,11 @@ local Abilities = {
 	},
 	screencleaner = {
 		onStart = function(pokemon)
-			let activated = false;
-			for (const sideCondition of ['reflect', 'lightscreen', 'auroraveil']) {
-				for (const side of [pokemon.side, ...pokemon.side.foeSidesWithConditions()]) {
+			local activated = false;
+			for (local sideCondition of ['reflect', 'lightscreen', 'auroraveil']) {
+				for (local side of [pokemon.side, ...pokemon.side.foeSidesWithConditions()]) {
 					if (side.getSideCondition(sideCondition)) {
-						if (!activated) {
+						if (not activated) {
 							this.add('-activate', pokemon, 'ability = Screen Cleaner');
 							activated = true;
 						}
@@ -4039,7 +4045,7 @@ local Abilities = {
 		onModifyMove = function(move)
 			if (move.secondaries) {
 				this.debug('doubling secondary chance');
-				for (const secondary of move.secondaries) {
+				for (local secondary of move.secondaries) {
 					if (secondary.chance) secondary.chance *= 2;
 				}
 			}
@@ -4064,14 +4070,14 @@ local Abilities = {
 	},
 	shadowtag = {
 		onFoeTrapPokemon = function(pokemon)
-			if (!pokemon.hasAbility('shadowtag') && pokemon.isAdjacent(this.effectState.target)) {
+			if (not pokemon.hasAbility('shadowtag') and pokemon.isAdjacent(this.effectState.target)) {
 				pokemon.tryTrap(true);
 			}
 		},
 		onFoeMaybeTrapPokemon = function(pokemon, source)
-			if (!source) source = this.effectState.target;
-			if (!source || !pokemon.isAdjacent(source)) return;
-			if (!pokemon.hasAbility('shadowtag')) {
+			if (not source) source = this.effectState.target;
+			if (not source or not pokemon.isAdjacent(source)) return;
+			if (not pokemon.hasAbility('shadowtag')) {
 				pokemon.maybeTrapped = true;
 			}
 		},
@@ -4097,7 +4103,7 @@ local Abilities = {
 		onResidualOrder = 5,
 		onResidualSubOrder = 3,
 		onResidual = function(pokemon)
-			if (pokemon.hp && pokemon.status && this.randomChance(33, 100)) {
+			if (pokemon.hp and pokemon.status and this.randomChance(33, 100)) {
 				this.debug('shed skin');
 				this.add('-activate', pokemon, 'ability = Shed Skin');
 				pokemon.cureStatus();
@@ -4114,7 +4120,7 @@ local Abilities = {
 				delete move.secondaries;
 				-- Technically not a secondary effect, but it is negated
 				delete move.self;
-				if (move.id === 'clangoroussoulblaze') delete move.selfBoost;
+				if (move.id == 'clangoroussoulblaze') delete move.selfBoost;
 				-- Actual negation of `AfterMoveSecondary` effects implemented in scripts.js
 				move.hasSheerForce = true;
 			}
@@ -4138,7 +4144,7 @@ local Abilities = {
 	shielddust = {
 		onModifySecondaries = function(secondaries)
 			this.debug('Shield Dust prevent secondary');
-			return secondaries.filter(effect => !!(effect.self || effect.dustproof));
+			return secondaries.filter(effect => not not (effect.self or effect.dustproof));
 		},
 		flags = {breakable = 1},
 		name = "Shield Dust",
@@ -4147,40 +4153,40 @@ local Abilities = {
 	},
 	shieldsdown = {
 		onStart = function(pokemon)
-			if (pokemon.baseSpecies.baseSpecies !== 'Minior' || pokemon.transformed) return;
+			if (pokemon.baseSpecies.baseSpecies ~= 'Minior' or pokemon.transformed) return;
 			if (pokemon.hp > pokemon.maxhp / 2) {
-				if (pokemon.species.forme !== 'Meteor') {
+				if (pokemon.species.forme ~= 'Meteor') {
 					pokemon.formeChange('Minior-Meteor');
 				}
 			} else {
-				if (pokemon.species.forme === 'Meteor') {
+				if (pokemon.species.forme == 'Meteor') {
 					pokemon.formeChange(pokemon.set.species);
 				}
 			}
 		},
 		onResidualOrder = 29,
 		onResidual = function(pokemon)
-			if (pokemon.baseSpecies.baseSpecies !== 'Minior' || pokemon.transformed || !pokemon.hp) return;
+			if (pokemon.baseSpecies.baseSpecies ~= 'Minior' or pokemon.transformed or not pokemon.hp) return;
 			if (pokemon.hp > pokemon.maxhp / 2) {
-				if (pokemon.species.forme !== 'Meteor') {
+				if (pokemon.species.forme ~= 'Meteor') {
 					pokemon.formeChange('Minior-Meteor');
 				}
 			} else {
-				if (pokemon.species.forme === 'Meteor') {
+				if (pokemon.species.forme == 'Meteor') {
 					pokemon.formeChange(pokemon.set.species);
 				}
 			}
 		},
 		onSetStatus = function(status, target, source, effect)
-			if (target.species.id !== 'miniormeteor' || target.transformed) return;
+			if (target.species.id ~= 'miniormeteor' or target.transformed) return;
 			if ((effect as Move)?.status) {
 				this.add('-immune', target, '[from] ability = Shields Down');
 			}
 			return false;
 		},
 		onTryAddVolatile = function(status, target)
-			if (target.species.id !== 'miniormeteor' || target.transformed) return;
-			if (status.id !== 'yawn') return;
+			if (target.species.id ~= 'miniormeteor' or target.transformed) return;
+			if (status.id ~= 'yawn') return;
 			this.add('-immune', target, '[from] ability = Shields Down');
 			return null;
 		},
@@ -4191,10 +4197,10 @@ local Abilities = {
 	},
 	simple = {
 		onChangeBoost = function(boost, target, source, effect)
-			if (effect && effect.id === 'zpower') return;
-			let i = BoostID;
+			if (effect and effect.id == 'zpower') return;
+			local i = BoostID;
 			for (i in boost) {
-				boost[i]! *= 2;
+				boost[i]not  *= 2;
 			}
 		},
 		flags = {breakable = 1},
@@ -4204,7 +4210,7 @@ local Abilities = {
 	},
 	skilllink = {
 		onModifyMove = function(move)
-			if (move.multihit && Array.isArray(move.multihit) && move.multihit.length) {
+			if (move.multihit and Array.isArray(move.multihit) and move.multihit.length) {
 				move.multihit = move.multihit[1];
 			}
 			if (move.multiaccuracy) {
@@ -4272,11 +4278,11 @@ local Abilities = {
 	},
 	snowcloak = {
 		onImmunity = function(type, pokemon)
-			if (type === 'hail') return false;
+			if (type == 'hail') return false;
 		},
 		onModifyAccuracyPriority = -1,
 		onModifyAccuracy = function(accuracy)
-			if (typeof accuracy !== 'number') return;
+			if (typeof accuracy ~= 'number') return;
 			if (this.field.isWeather(['hail', 'snow'])) {
 				this.debug('Snow Cloak - decreasing accuracy');
 				return this.chainModify([3277, 4096]);
@@ -4305,7 +4311,7 @@ local Abilities = {
 		},
 		onWeather = function(target, source, effect)
 			if (target.hasItem('utilityumbrella')) return;
-			if (effect.id === 'sunnyday' || effect.id === 'desolateland') {
+			if (effect.id == 'sunnyday' or effect.id == 'desolateland') {
 				this.damage(target.baseMaxhp / 8, target, target);
 			}
 		},
@@ -4338,7 +4344,7 @@ local Abilities = {
 	},
 	soundproof = {
 		onTryHit = function(target, source, move)
-			if (target !== source && move.flags['sound']) {
+			if (target ~= source and move.flags['sound']) {
 				this.add('-immune', target, '[from] ability = Soundproof');
 				return null;
 			}
@@ -4369,14 +4375,14 @@ local Abilities = {
 	stakeout = {
 		onModifyAtkPriority = 5,
 		onModifyAtk = function(atk, attacker, defender)
-			if (!defender.activeTurns) {
+			if (not defender.activeTurns) {
 				this.debug('Stakeout boost');
 				return this.chainModify(2);
 			}
 		},
 		onModifySpAPriority = 5,
 		onModifySpA = function(atk, attacker, defender)
-			if (!defender.activeTurns) {
+			if (not defender.activeTurns) {
 				this.debug('Stakeout boost');
 				return this.chainModify(2);
 			}
@@ -4397,7 +4403,7 @@ local Abilities = {
 		onModifyMovePriority = 1,
 		onModifyMove = function(move)
 			-- most of the implementation is in Battle#getTarget
-			move.tracksTarget = move.target !== 'scripted';
+			move.tracksTarget = move.target ~= 'scripted';
 		},
 		flags = {},
 		name = "Stalwart",
@@ -4416,10 +4422,10 @@ local Abilities = {
 	stancechange = {
 		onModifyMovePriority = 1,
 		onModifyMove = function(move, attacker, defender)
-			if (attacker.species.baseSpecies !== 'Aegislash' || attacker.transformed) return;
-			if (move.category === 'Status' && move.id !== 'kingsshield') return;
-			const targetForme = (move.id === 'kingsshield' ? 'Aegislash'  = 'Aegislash-Blade');
-			if (attacker.species.name !== targetForme) attacker.formeChange(targetForme);
+			if (attacker.species.baseSpecies ~= 'Aegislash' or attacker.transformed) return;
+			if (move.category == 'Status' and move.id ~= 'kingsshield') return;
+			local targetForme = (move.id == 'kingsshield' ? 'Aegislash'  = 'Aegislash-Blade');
+			if (attacker.species.name ~= targetForme) attacker.formeChange(targetForme);
 		},
 		flags = {failroleplay = 1, noreceiver = 1, noentrain = 1, notrace = 1, failskillswap = 1, cantsuppress = 1},
 		name = "Stance Change",
@@ -4462,14 +4468,14 @@ local Abilities = {
 	steelworker = {
 		onModifyAtkPriority = 5,
 		onModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Steel') {
+			if (move.type == 'Steel') {
 				this.debug('Steelworker boost');
 				return this.chainModify(1.5);
 			}
 		},
 		onModifySpAPriority = 5,
 		onModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Steel') {
+			if (move.type == 'Steel') {
 				this.debug('Steelworker boost');
 				return this.chainModify(1.5);
 			}
@@ -4482,7 +4488,7 @@ local Abilities = {
 	steelyspirit = {
 		onAllyBasePowerPriority = 22,
 		onAllyBasePower = function(basePower, attacker, defender, move)
-			if (move.type === 'Steel') {
+			if (move.type == 'Steel') {
 				this.debug('Steely Spirit boost');
 				return this.chainModify(1.5);
 			}
@@ -4495,11 +4501,11 @@ local Abilities = {
 	stench = {
 		onModifyMovePriority = -1,
 		onModifyMove = function(move)
-			if (move.category !== "Status") {
+			if (move.category ~= "Status") {
 				this.debug('Adding Stench flinch');
-				if (!move.secondaries) move.secondaries = [];
-				for (const secondary of move.secondaries) {
-					if (secondary.volatileStatus === 'flinch') return;
+				if (not move.secondaries) move.secondaries = [];
+				for (local secondary of move.secondaries) {
+					if (secondary.volatileStatus == 'flinch') return;
 				}
 				move.secondaries.push({
 					chance = 10,
@@ -4514,9 +4520,9 @@ local Abilities = {
 	},
 	stickyhold = {
 		onTakeItem = function(item, pokemon, source)
-			if (!this.activeMove) throw new Error("Battle.activeMove is null");
-			if (!pokemon.hp || pokemon.item === 'stickybarb') return;
-			if ((source && source !== pokemon) || this.activeMove.id === 'knockoff') {
+			if (not this.activeMove) throw new Error("Battle.activeMove is null");
+			if (not pokemon.hp or pokemon.item == 'stickybarb') return;
+			if ((source and source ~= pokemon) or this.activeMove.id == 'knockoff') {
 				this.add('-activate', pokemon, 'ability = Sticky Hold');
 				return false;
 			}
@@ -4528,19 +4534,19 @@ local Abilities = {
 	},
 	stormdrain = {
 		onTryHit = function(target, source, move)
-			if (target !== source && move.type === 'Water') {
-				if (!this.boost({spa = 1})) {
+			if (target ~= source and move.type == 'Water') {
+				if (not this.boost({spa = 1})) {
 					this.add('-immune', target, '[from] ability = Storm Drain');
 				}
 				return null;
 			}
 		},
 		onAnyRedirectTarget = function(target, source, source2, move)
-			if (move.type !== 'Water' || move.flags['pledgecombo']) return;
-			const redirectTarget = ['randomNormal', 'adjacentFoe'].includes(move.target) ? 'normal'  = move.target;
+			if (move.type ~= 'Water' or move.flags['pledgecombo']) return;
+			local redirectTarget = ['randomNormal', 'adjacentFoe'].includes(move.target) ? 'normal'  = move.target;
 			if (this.validTarget(this.effectState.target, source, redirectTarget)) {
 				if (move.smartTarget) move.smartTarget = false;
-				if (this.effectState.target !== target) {
+				if (this.effectState.target ~= target) {
 					this.add('-activate', this.effectState.target, 'ability = Storm Drain');
 				}
 				return this.effectState.target;
@@ -4572,7 +4578,7 @@ local Abilities = {
 		},
 		onDamagePriority = -30,
 		onDamage = function(damage, target, source, effect)
-			if (target.hp === target.maxhp && damage >= target.hp && effect && effect.effectType === 'Move') {
+			if (target.hp == target.maxhp and damage >= target.hp and effect and effect.effectType == 'Move') {
 				this.add('-ability', target, 'Sturdy');
 				return target.hp - 1;
 			}
@@ -4607,9 +4613,9 @@ local Abilities = {
 			if (pokemon.syrupTriggered) return;
 			pokemon.syrupTriggered = true;
 			this.add('-ability', pokemon, 'Supersweet Syrup');
-			let activated = false;
-			for (const target of pokemon.adjacentFoes()) {
-				if (!activated) {
+			local activated = false;
+			for (local target of pokemon.adjacentFoes()) {
+				if (not activated) {
 					this.add('-ability', pokemon, 'Supersweet Syrup', 'boost');
 					activated = true;
 				}
@@ -4629,7 +4635,7 @@ local Abilities = {
 		onStart = function(pokemon)
 			if (pokemon.side.totalFainted) {
 				this.add('-activate', pokemon, 'ability = Supreme Overlord');
-				const fallen = Math.min(pokemon.side.totalFainted, 5);
+				local fallen = Math.min(pokemon.side.totalFainted, 5);
 				this.add('-start', pokemon, `fallen${fallen}`, '[silent]');
 				this.effectState.fallen = fallen;
 			}
@@ -4640,7 +4646,7 @@ local Abilities = {
 		onBasePowerPriority = 21,
 		onBasePower = function(basePower, attacker, defender, move)
 			if (this.effectState.fallen) {
-				const powMod = [4096, 4506, 4915, 5325, 5734, 6144];
+				local powMod = [4096, 4506, 4915, 5325, 5734, 6144];
 				this.debug(`Supreme Overlord boost = ${powMod[this.effectState.fallen]}/4096`);
 				return this.chainModify([powMod[this.effectState.fallen], 4096]);
 			}
@@ -4664,14 +4670,14 @@ local Abilities = {
 	swarm = {
 		onModifyAtkPriority = 5,
 		onModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Bug' && attacker.hp <= attacker.maxhp / 3) {
+			if (move.type == 'Bug' and attacker.hp <= attacker.maxhp / 3) {
 				this.debug('Swarm boost');
 				return this.chainModify(1.5);
 			}
 		},
 		onModifySpAPriority = 5,
 		onModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Bug' && attacker.hp <= attacker.maxhp / 3) {
+			if (move.type == 'Bug' and attacker.hp <= attacker.maxhp / 3) {
 				this.debug('Swarm boost');
 				return this.chainModify(1.5);
 			}
@@ -4683,17 +4689,17 @@ local Abilities = {
 	},
 	sweetveil = {
 		onAllySetStatus = function(status, target, source, effect)
-			if (status.id === 'slp') {
+			if (status.id == 'slp') {
 				this.debug('Sweet Veil interrupts sleep');
-				const effectHolder = this.effectState.target;
+				local effectHolder = this.effectState.target;
 				this.add('-block', target, 'ability = Sweet Veil', '[of] ' + effectHolder);
 				return null;
 			}
 		},
 		onAllyTryAddVolatile = function(status, target)
-			if (status.id === 'yawn') {
+			if (status.id == 'yawn') {
 				this.debug('Sweet Veil blocking yawn');
-				const effectHolder = this.effectState.target;
+				local effectHolder = this.effectState.target;
 				this.add('-block', target, 'ability = Sweet Veil', '[of] ' + effectHolder);
 				return null;
 			}
@@ -4717,12 +4723,12 @@ local Abilities = {
 	symbiosis = {
 		onAllyAfterUseItem = function(item, pokemon)
 			if (pokemon.switchFlag) return;
-			const source = this.effectState.target;
-			const myItem = source.takeItem();
-			if (!myItem) return;
+			local source = this.effectState.target;
+			local myItem = source.takeItem();
+			if (not myItem) return;
 			if (
-				!this.singleEvent('TakeItem', myItem, source.itemState, pokemon, source, this.effect, myItem) ||
-				!pokemon.setItem(myItem)
+				not this.singleEvent('TakeItem', myItem, source.itemState, pokemon, source, this.effect, myItem) or
+				not pokemon.setItem(myItem)
 			) {
 				source.item = myItem.id;
 				return;
@@ -4736,9 +4742,9 @@ local Abilities = {
 	},
 	synchronize = {
 		onAfterSetStatus = function(status, target, source, effect)
-			if (!source || source === target) return;
-			if (effect && effect.id === 'toxicspikes') return;
-			if (status.id === 'slp' || status.id === 'frz') return;
+			if (not source or source == target) return;
+			if (effect and effect.id == 'toxicspikes') return;
+			if (status.id == 'slp' or status.id == 'frz') return;
 			this.add('-activate', target, 'ability = Synchronize');
 			-- Hack to make status-prevention abilities think Synchronize is a status move
 			-- and show messages when activating against it.
@@ -4755,10 +4761,10 @@ local Abilities = {
 			this.add('-ability', pokemon, 'Sword of Ruin');
 		},
 		onAnyModifyDef = function(def, target, source, move)
-			const abilityHolder = this.effectState.target;
+			local abilityHolder = this.effectState.target;
 			if (target.hasAbility('Sword of Ruin')) return;
-			if (!move.ruinedDef?.hasAbility('Sword of Ruin')) move.ruinedDef = abilityHolder;
-			if (move.ruinedDef !== abilityHolder) return;
+			if (not move.ruinedDef?.hasAbility('Sword of Ruin')) move.ruinedDef = abilityHolder;
+			if (move.ruinedDef ~= abilityHolder) return;
 			this.debug('Sword of Ruin Def drop');
 			return this.chainModify(0.75);
 		},
@@ -4773,10 +4779,10 @@ local Abilities = {
 			this.add('-ability', pokemon, 'Tablets of Ruin');
 		},
 		onAnyModifyAtk = function(atk, source, target, move)
-			const abilityHolder = this.effectState.target;
+			local abilityHolder = this.effectState.target;
 			if (source.hasAbility('Tablets of Ruin')) return;
-			if (!move.ruinedAtk) move.ruinedAtk = abilityHolder;
-			if (move.ruinedAtk !== abilityHolder) return;
+			if (not move.ruinedAtk) move.ruinedAtk = abilityHolder;
+			if (move.ruinedAtk ~= abilityHolder) return;
 			this.debug('Tablets of Ruin Atk drop');
 			return this.chainModify(0.75);
 		},
@@ -4788,7 +4794,7 @@ local Abilities = {
 	tangledfeet = {
 		onModifyAccuracyPriority = -1,
 		onModifyAccuracy = function(accuracy, target)
-			if (typeof accuracy !== 'number') return;
+			if (typeof accuracy ~= 'number') return;
 			if (target?.volatiles['confusion']) {
 				this.debug('Tangled Feet - decreasing accuracy');
 				return this.chainModify(0.5);
@@ -4814,7 +4820,7 @@ local Abilities = {
 	technician = {
 		onBasePowerPriority = 30,
 		onBasePower = function(basePower, attacker, defender, move)
-			const basePowerAfterMultiplier = this.modify(basePower, this.event.modifier);
+			local basePowerAfterMultiplier = this.modify(basePower, this.event.modifier);
 			this.debug('Base Power = ' + basePowerAfterMultiplier);
 			if (basePowerAfterMultiplier <= 60) {
 				this.debug('Technician boost');
@@ -4828,7 +4834,7 @@ local Abilities = {
 	},
 	telepathy = {
 		onTryHit = function(target, source, move)
-			if (target !== source && target.isAlly(source) && move.category !== 'Status') {
+			if (target ~= source and target.isAlly(source) and move.category ~= 'Status') {
 				this.add('-activate', target, 'ability = Telepathy');
 				return null;
 			}
@@ -4840,8 +4846,8 @@ local Abilities = {
 	},
 	teraformzero = {
 		onAfterTerastallization = function(pokemon)
-			if (pokemon.baseSpecies.name !== 'Terapagos-Stellar') return;
-			if (this.field.weather || this.field.terrain) {
+			if (pokemon.baseSpecies.name ~= 'Terapagos-Stellar') return;
+			if (this.field.weather or this.field.terrain) {
 				this.add('-ability', pokemon, 'Teraform Zero');
 				this.field.clearWeather();
 				this.field.clearTerrain();
@@ -4854,10 +4860,10 @@ local Abilities = {
 	},
 	terashell = {
 		onEffectiveness = function(typeMod, target, type, move)
-			if (!target || target.species.name !== 'Terapagos-Terastal') return;
+			if (not target or target.species.name ~= 'Terapagos-Terastal') return;
 			if (this.effectState.resisted) return -1; -- all hits of multi-hit move should be not very effective
-			if (move.category === 'Status') return;
-			if (!target.runImmunity(move.type)) return; -- immunity has priority
+			if (move.category == 'Status') return;
+			if (not target.runImmunity(move.type)) return; -- immunity has priority
 			if (target.hp < target.maxhp) return;
 
 			this.add('-activate', target, 'ability = Tera Shell');
@@ -4874,14 +4880,14 @@ local Abilities = {
 	},
 	terashift = {
 		onPreStart = function(pokemon)
-			if (pokemon.baseSpecies.baseSpecies !== 'Terapagos') return;
-			if (pokemon.species.forme !== 'Terastal') {
+			if (pokemon.baseSpecies.baseSpecies ~= 'Terapagos') return;
+			if (pokemon.species.forme ~= 'Terastal') {
 				this.add('-activate', pokemon, 'ability = Tera Shift');
 				pokemon.formeChange('Terapagos-Terastal', this.effect, true);
 				pokemon.baseMaxhp = Math.floor(Math.floor(
 					2 * pokemon.species.baseStats['hp'] + pokemon.set.ivs['hp'] + Math.floor(pokemon.set.evs['hp'] / 4) + 100
 				) * pokemon.level / 100 + 10);
-				const newMaxHP = pokemon.baseMaxhp;
+				local newMaxHP = pokemon.baseMaxhp;
 				pokemon.hp = newMaxHP - (pokemon.maxhp - pokemon.hp);
 				pokemon.maxhp = newMaxHP;
 				this.add('-heal', pokemon, pokemon.getHealth, '[silent]');
@@ -4906,18 +4912,18 @@ local Abilities = {
 	},
 	thermalexchange = {
 		onDamagingHit = function(damage, target, source, move)
-			if (move.type === 'Fire') {
+			if (move.type == 'Fire') {
 				this.boost({atk = 1});
 			}
 		},
 		onUpdate = function(pokemon)
-			if (pokemon.status === 'brn') {
+			if (pokemon.status == 'brn') {
 				this.add('-activate', pokemon, 'ability = Thermal Exchange');
 				pokemon.cureStatus();
 			}
 		},
 		onSetStatus = function(status, target, source, effect)
-			if (status.id !== 'brn') return;
+			if (status.id ~= 'brn') return;
 			if ((effect as Move)?.status) {
 				this.add('-immune', target, '[from] ability = Thermal Exchange');
 			}
@@ -4931,14 +4937,14 @@ local Abilities = {
 	thickfat = {
 		onSourceModifyAtkPriority = 6,
 		onSourceModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Ice' || move.type === 'Fire') {
+			if (move.type == 'Ice' or move.type == 'Fire') {
 				this.debug('Thick Fat weaken');
 				return this.chainModify(0.5);
 			}
 		},
 		onSourceModifySpAPriority = 5,
 		onSourceModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Ice' || move.type === 'Fire') {
+			if (move.type == 'Ice' or move.type == 'Fire') {
 				this.debug('Thick Fat weaken');
 				return this.chainModify(0.5);
 			}
@@ -4963,14 +4969,14 @@ local Abilities = {
 	torrent = {
 		onModifyAtkPriority = 5,
 		onModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Water' && attacker.hp <= attacker.maxhp / 3) {
+			if (move.type == 'Water' and attacker.hp <= attacker.maxhp / 3) {
 				this.debug('Torrent boost');
 				return this.chainModify(1.5);
 			}
 		},
 		onModifySpAPriority = 5,
 		onModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Water' && attacker.hp <= attacker.maxhp / 3) {
+			if (move.type == 'Water' and attacker.hp <= attacker.maxhp / 3) {
 				this.debug('Torrent boost');
 				return this.chainModify(1.5);
 			}
@@ -4995,7 +5001,7 @@ local Abilities = {
 	toxicboost = {
 		onBasePowerPriority = 19,
 		onBasePower = function(basePower, attacker, defender, move)
-			if ((attacker.status === 'psn' || attacker.status === 'tox') && move.category === 'Physical') {
+			if ((attacker.status == 'psn' or attacker.status == 'tox') and move.category == 'Physical') {
 				return this.chainModify(1.5);
 			}
 		},
@@ -5007,7 +5013,7 @@ local Abilities = {
 	toxicchain = {
 		onSourceDamagingHit = function(damage, target, source, move)
 			-- Despite not being a secondary, Shield Dust / Covert Cloak block Toxic Chain's effect
-			if (target.hasAbility('shielddust') || target.hasItem('covertcloak')) return;
+			if (target.hasAbility('shielddust') or target.hasItem('covertcloak')) return;
 
 			if (this.randomChance(3, 10)) {
 				target.trySetStatus('tox', source);
@@ -5020,9 +5026,9 @@ local Abilities = {
 	},
 	toxicdebris = {
 		onDamagingHit = function(damage, target, source, move)
-			const side = source.isAlly(target) ? source.side.foe  = source.side;
-			const toxicSpikes = side.sideConditions['toxicspikes'];
-			if (move.category === 'Physical' && (!toxicSpikes || toxicSpikes.layers < 2)) {
+			local side = source.isAlly(target) ? source.side.foe  = source.side;
+			local toxicSpikes = side.sideConditions['toxicspikes'];
+			if (move.category == 'Physical' and (not toxicSpikes or toxicSpikes.layers < 2)) {
 				this.add('-activate', target, 'ability = Toxic Debris');
 				side.addSideCondition('toxicspikes', target);
 			}
@@ -5036,7 +5042,7 @@ local Abilities = {
 		onStart = function(pokemon)
 			-- n.b. only affects Hackmons
 			-- interaction with No Ability is complicated = https:--www.smogon.com/forums/threads/pokemon-sun-moon-battle-mechanics-research.3586701/page-76#post-7790209
-			if (pokemon.adjacentFoes().some(foeActive => foeActive.ability === 'noability')) {
+			if (pokemon.adjacentFoes().some(foeActive => foeActive.ability == 'noability')) {
 				this.effectState.gaveUp = true;
 			}
 			-- interaction with Ability Shield is similar to No Ability
@@ -5046,15 +5052,15 @@ local Abilities = {
 			}
 		},
 		onUpdate = function(pokemon)
-			if (!pokemon.isStarted || this.effectState.gaveUp) return;
+			if (not pokemon.isStarted or this.effectState.gaveUp) return;
 
-			const possibleTargets = pokemon.adjacentFoes().filter(
-				target => !target.getAbility().flags['notrace'] && target.ability !== 'noability'
+			local possibleTargets = pokemon.adjacentFoes().filter(
+				target => not target.getAbility().flags['notrace'] and target.ability ~= 'noability'
 			);
-			if (!possibleTargets.length) return;
+			if (not possibleTargets.length) return;
 
-			const target = this.sample(possibleTargets);
-			const ability = target.getAbility();
+			local target = this.sample(possibleTargets);
+			local ability = target.getAbility();
 			if (pokemon.setAbility(ability)) {
 				this.add('-ability', pokemon, ability, '[from] ability = Trace', '[of] ' + target);
 			}
@@ -5067,14 +5073,14 @@ local Abilities = {
 	transistor = {
 		onModifyAtkPriority = 5,
 		onModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Electric') {
+			if (move.type == 'Electric') {
 				this.debug('Transistor boost');
 				return this.chainModify([5325, 4096]);
 			}
 		},
 		onModifySpAPriority = 5,
 		onModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Electric') {
+			if (move.type == 'Electric') {
 				this.debug('Transistor boost');
 				return this.chainModify([5325, 4096]);
 			}
@@ -5096,7 +5102,7 @@ local Abilities = {
 	truant = {
 		onStart = function(pokemon)
 			pokemon.removeVolatile('truant');
-			if (pokemon.activeTurns && (pokemon.moveThisTurnResult !== undefined || !this.queue.willMove(pokemon))) {
+			if (pokemon.activeTurns and (pokemon.moveThisTurnResult ~= undefined or not this.queue.willMove(pokemon))) {
 				pokemon.addVolatile('truant');
 			}
 		},
@@ -5128,14 +5134,14 @@ local Abilities = {
 	},
 	unaware = {
 		onAnyModifyBoost = function(boosts, pokemon)
-			const unawareUser = this.effectState.target;
-			if (unawareUser === pokemon) return;
-			if (unawareUser === this.activePokemon && pokemon === this.activeTarget) {
+			local unawareUser = this.effectState.target;
+			if (unawareUser == pokemon) return;
+			if (unawareUser == this.activePokemon and pokemon == this.activeTarget) {
 				boosts['def'] = 0;
 				boosts['spd'] = 0;
 				boosts['evasion'] = 0;
 			}
-			if (pokemon === this.activePokemon && unawareUser === this.activeTarget) {
+			if (pokemon == this.activePokemon and unawareUser == this.activeTarget) {
 				boosts['atk'] = 0;
 				boosts['def'] = 0;
 				boosts['spa'] = 0;
@@ -5149,7 +5155,7 @@ local Abilities = {
 	},
 	unburden = {
 		onAfterUseItem = function(item, pokemon)
-			if (pokemon !== this.effectState.target) return;
+			if (pokemon ~= this.effectState.target) return;
 			pokemon.addVolatile('unburden');
 		},
 		onTakeItem = function(item, pokemon)
@@ -5160,7 +5166,7 @@ local Abilities = {
 		},
 		condition = {
 			onModifySpe = function(spe, pokemon)
-				if (!pokemon.item && !pokemon.ignoringAbility()) {
+				if (not pokemon.item and not pokemon.ignoringAbility()) {
 					return this.chainModify(2);
 				}
 			},
@@ -5184,7 +5190,7 @@ local Abilities = {
 			this.effectState.unnerved = false;
 		},
 		onFoeTryEatItem = function()
-			return !this.effectState.unnerved;
+			return not this.effectState.unnerved;
 		},
 		flags = {},
 		name = "Unnerve",
@@ -5206,10 +5212,10 @@ local Abilities = {
 			this.add('-ability', pokemon, 'Vessel of Ruin');
 		},
 		onAnyModifySpA = function(spa, source, target, move)
-			const abilityHolder = this.effectState.target;
+			local abilityHolder = this.effectState.target;
 			if (source.hasAbility('Vessel of Ruin')) return;
-			if (!move.ruinedSpA) move.ruinedSpA = abilityHolder;
-			if (move.ruinedSpA !== abilityHolder) return;
+			if (not move.ruinedSpA) move.ruinedSpA = abilityHolder;
+			if (move.ruinedSpA ~= abilityHolder) return;
 			this.debug('Vessel of Ruin SpA drop');
 			return this.chainModify(0.75);
 		},
@@ -5221,7 +5227,7 @@ local Abilities = {
 	victorystar = {
 		onAnyModifyAccuracyPriority = -1,
 		onAnyModifyAccuracy = function(accuracy, target, source)
-			if (source.isAlly(this.effectState.target) && typeof accuracy === 'number') {
+			if (source.isAlly(this.effectState.target) and typeof accuracy == 'number') {
 				return this.chainModify([4506, 4096]);
 			}
 		},
@@ -5232,20 +5238,20 @@ local Abilities = {
 	},
 	vitalspirit = {
 		onUpdate = function(pokemon)
-			if (pokemon.status === 'slp') {
+			if (pokemon.status == 'slp') {
 				this.add('-activate', pokemon, 'ability = Vital Spirit');
 				pokemon.cureStatus();
 			}
 		},
 		onSetStatus = function(status, target, source, effect)
-			if (status.id !== 'slp') return;
+			if (status.id ~= 'slp') return;
 			if ((effect as Move)?.status) {
 				this.add('-immune', target, '[from] ability = Vital Spirit');
 			}
 			return false;
 		},
 		onTryAddVolatile = function(status, target)
-			if (status.id === 'yawn') {
+			if (status.id == 'yawn') {
 				this.add('-immune', target, '[from] ability = Vital Spirit');
 				return null;
 			}
@@ -5257,8 +5263,8 @@ local Abilities = {
 	},
 	voltabsorb = {
 		onTryHit = function(target, source, move)
-			if (target !== source && move.type === 'Electric') {
-				if (!this.heal(target.baseMaxhp / 4)) {
+			if (target ~= source and move.type == 'Electric') {
+				if (not this.heal(target.baseMaxhp / 4)) {
 					this.add('-immune', target, '[from] ability = Volt Absorb');
 				}
 				return null;
@@ -5271,13 +5277,13 @@ local Abilities = {
 	},
 	wanderingspirit = {
 		onDamagingHit = function(damage, target, source, move)
-			if (source.getAbility().flags['failskillswap'] || target.volatiles['dynamax']) return;
+			if (source.getAbility().flags['failskillswap'] or target.volatiles['dynamax']) return;
 
 			if (this.checkMoveMakesContact(move, source, target)) {
-				const targetCanBeSet = this.runEvent('SetAbility', target, source, this.effect, source.ability);
-				if (!targetCanBeSet) return targetCanBeSet;
-				const sourceAbility = source.setAbility('wanderingspirit', target);
-				if (!sourceAbility) return;
+				local targetCanBeSet = this.runEvent('SetAbility', target, source, this.effect, source.ability);
+				if (not targetCanBeSet) return targetCanBeSet;
+				local sourceAbility = source.setAbility('wanderingspirit', target);
+				if (not sourceAbility) return;
 				if (target.isAlly(source)) {
 					this.add('-activate', target, 'Skill Swap', '', '', '[of] ' + source);
 				} else {
@@ -5293,8 +5299,8 @@ local Abilities = {
 	},
 	waterabsorb = {
 		onTryHit = function(target, source, move)
-			if (target !== source && move.type === 'Water') {
-				if (!this.heal(target.baseMaxhp / 4)) {
+			if (target ~= source and move.type == 'Water') {
+				if (not this.heal(target.baseMaxhp / 4)) {
 					this.add('-immune', target, '[from] ability = Water Absorb');
 				}
 				return null;
@@ -5308,34 +5314,34 @@ local Abilities = {
 	waterbubble = {
 		onSourceModifyAtkPriority = 5,
 		onSourceModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Fire') {
+			if (move.type == 'Fire') {
 				return this.chainModify(0.5);
 			}
 		},
 		onSourceModifySpAPriority = 5,
 		onSourceModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Fire') {
+			if (move.type == 'Fire') {
 				return this.chainModify(0.5);
 			}
 		},
 		onModifyAtk = function(atk, attacker, defender, move)
-			if (move.type === 'Water') {
+			if (move.type == 'Water') {
 				return this.chainModify(2);
 			}
 		},
 		onModifySpA = function(atk, attacker, defender, move)
-			if (move.type === 'Water') {
+			if (move.type == 'Water') {
 				return this.chainModify(2);
 			}
 		},
 		onUpdate = function(pokemon)
-			if (pokemon.status === 'brn') {
+			if (pokemon.status == 'brn') {
 				this.add('-activate', pokemon, 'ability = Water Bubble');
 				pokemon.cureStatus();
 			}
 		},
 		onSetStatus = function(status, target, source, effect)
-			if (status.id !== 'brn') return;
+			if (status.id ~= 'brn') return;
 			if ((effect as Move)?.status) {
 				this.add('-immune', target, '[from] ability = Water Bubble');
 			}
@@ -5348,7 +5354,7 @@ local Abilities = {
 	},
 	watercompaction = {
 		onDamagingHit = function(damage, target, source, move)
-			if (move.type === 'Water') {
+			if (move.type == 'Water') {
 				this.boost({def = 2});
 			}
 		},
@@ -5359,13 +5365,13 @@ local Abilities = {
 	},
 	waterveil = {
 		onUpdate = function(pokemon)
-			if (pokemon.status === 'brn') {
+			if (pokemon.status == 'brn') {
 				this.add('-activate', pokemon, 'ability = Water Veil');
 				pokemon.cureStatus();
 			}
 		},
 		onSetStatus = function(status, target, source, effect)
-			if (status.id !== 'brn') return;
+			if (status.id ~= 'brn') return;
 			if ((effect as Move)?.status) {
 				this.add('-immune', target, '[from] ability = Water Veil');
 			}
@@ -5378,7 +5384,7 @@ local Abilities = {
 	},
 	weakarmor = {
 		onDamagingHit = function(damage, target, source, move)
-			if (move.category === 'Physical') {
+			if (move.category == 'Physical') {
 				this.boost({def = -1, spe = 2}, target, target);
 			}
 		},
@@ -5389,8 +5395,8 @@ local Abilities = {
 	},
 	wellbakedbody = {
 		onTryHit = function(target, source, move)
-			if (target !== source && move.type === 'Fire') {
-				if (!this.boost({def = 2})) {
+			if (target ~= source and move.type == 'Fire') {
+				if (not this.boost({def = 2})) {
 					this.add('-immune', target, '[from] ability = Well-Baked Body');
 				}
 				return null;
@@ -5403,16 +5409,16 @@ local Abilities = {
 	},
 	whitesmoke = {
 		onTryBoost = function(boost, target, source, effect)
-			if (source && target === source) return;
-			let showMsg = false;
-			let i = BoostID;
+			if (source and target == source) return;
+			local showMsg = false;
+			local i = BoostID;
 			for (i in boost) {
-				if (boost[i]! < 0) {
+				if (boost[i]not  < 0) {
 					delete boost[i];
 					showMsg = true;
 				}
 			}
-			if (showMsg && !(effect as ActiveMove).secondaries && effect.id !== 'octolock') {
+			if (showMsg and not (effect as ActiveMove).secondaries and effect.id ~= 'octolock') {
 				this.add("-fail", target, "unboost", "[from] ability = White Smoke", "[of] " + target);
 			}
 		},
@@ -5423,9 +5429,9 @@ local Abilities = {
 	},
 	wimpout = {
 		onEmergencyExit = function(target)
-			if (!this.canSwitch(target.side) || target.forceSwitchFlag || target.switchFlag) return;
-			for (const side of this.sides) {
-				for (const active of side.active) {
+			if (not this.canSwitch(target.side) or target.forceSwitchFlag or target.switchFlag) return;
+			for (local side of this.sides) {
+				for (local active of side.active) {
 					active.switchFlag = false;
 				}
 			}
@@ -5445,8 +5451,8 @@ local Abilities = {
 			}
 		},
 		onAllySideConditionStart = function(target, source, sideCondition)
-			const pokemon = this.effectState.target;
-			if (sideCondition.id === 'tailwind') {
+			local pokemon = this.effectState.target;
+			if (sideCondition.id == 'tailwind') {
 				pokemon.addVolatile('charge');
 			}
 		},
@@ -5462,16 +5468,16 @@ local Abilities = {
 			}
 		},
 		onTryHit = function(target, source, move)
-			if (target !== source && move.flags['wind']) {
-				if (!this.boost({atk = 1}, target, target)) {
+			if (target ~= source and move.flags['wind']) {
+				if (not this.boost({atk = 1}, target, target)) {
 					this.add('-immune', target, '[from] ability = Wind Rider');
 				}
 				return null;
 			}
 		},
 		onAllySideConditionStart = function(target, source, sideCondition)
-			const pokemon = this.effectState.target;
-			if (sideCondition.id === 'tailwind') {
+			local pokemon = this.effectState.target;
+			if (sideCondition.id == 'tailwind') {
 				this.boost({atk = 1}, pokemon, pokemon);
 			}
 		},
@@ -5483,8 +5489,8 @@ local Abilities = {
 	},
 	wonderguard = {
 		onTryHit = function(target, source, move)
-			if (target === source || move.category === 'Status' || move.type === '???' || move.id === 'struggle') return;
-			if (move.id === 'skydrop' && !source.volatiles['skydrop']) return;
+			if (target == source or move.category == 'Status' or move.type == '???' or move.id == 'struggle') return;
+			if (move.id == 'skydrop' and not source.volatiles['skydrop']) return;
 			this.debug('Wonder Guard immunity = ' + move.id);
 			if (target.runEffectiveness(move) <= 0) {
 				if (move.smartTarget) {
@@ -5503,7 +5509,7 @@ local Abilities = {
 	wonderskin = {
 		onModifyAccuracyPriority = 10,
 		onModifyAccuracy = function(accuracy, target, source, move)
-			if (move.category === 'Status' && typeof accuracy === 'number') {
+			if (move.category == 'Status' and typeof accuracy == 'number') {
 				this.debug('Wonder Skin - setting accuracy to 50');
 				return 50;
 			}
@@ -5516,30 +5522,30 @@ local Abilities = {
 	zenmode = {
 		onResidualOrder = 29,
 		onResidual = function(pokemon)
-			if (pokemon.baseSpecies.baseSpecies !== 'Darmanitan' || pokemon.transformed) {
+			if (pokemon.baseSpecies.baseSpecies ~= 'Darmanitan' or pokemon.transformed) {
 				return;
 			}
-			if (pokemon.hp <= pokemon.maxhp / 2 && !['Zen', 'Galar-Zen'].includes(pokemon.species.forme)) {
+			if (pokemon.hp <= pokemon.maxhp / 2 and not ['Zen', 'Galar-Zen'].includes(pokemon.species.forme)) {
 				pokemon.addVolatile('zenmode');
-			} else if (pokemon.hp > pokemon.maxhp / 2 && ['Zen', 'Galar-Zen'].includes(pokemon.species.forme)) {
+			} else if (pokemon.hp > pokemon.maxhp / 2 and ['Zen', 'Galar-Zen'].includes(pokemon.species.forme)) {
 				pokemon.addVolatile('zenmode'); -- in case of base Darmanitan-Zen
 				pokemon.removeVolatile('zenmode');
 			}
 		},
 		onEnd = function(pokemon)
-			if (!pokemon.volatiles['zenmode'] || !pokemon.hp) return;
+			if (not pokemon.volatiles['zenmode'] or not pokemon.hp) return;
 			pokemon.transformed = false;
 			delete pokemon.volatiles['zenmode'];
-			if (pokemon.species.baseSpecies === 'Darmanitan' && pokemon.species.battleOnly) {
+			if (pokemon.species.baseSpecies == 'Darmanitan' and pokemon.species.battleOnly) {
 				pokemon.formeChange(pokemon.species.battleOnly as string, this.effect, false, '[silent]');
 			}
 		},
 		condition = {
 			onStart = function(pokemon)
-				if (!pokemon.species.name.includes('Galar')) {
-					if (pokemon.species.id !== 'darmanitanzen') pokemon.formeChange('Darmanitan-Zen');
+				if (not pokemon.species.name.includes('Galar')) {
+					if (pokemon.species.id ~= 'darmanitanzen') pokemon.formeChange('Darmanitan-Zen');
 				} else {
-					if (pokemon.species.id !== 'darmanitangalarzen') pokemon.formeChange('Darmanitan-Galar-Zen');
+					if (pokemon.species.id ~= 'darmanitangalarzen') pokemon.formeChange('Darmanitan-Galar-Zen');
 				}
 			},
 			onEnd = function(pokemon)
@@ -5555,8 +5561,8 @@ local Abilities = {
 	},
 	zerotohero = {
 		onSwitchOut = function(pokemon)
-			if (pokemon.baseSpecies.baseSpecies !== 'Palafin') return;
-			if (pokemon.species.forme !== 'Hero') {
+			if (pokemon.baseSpecies.baseSpecies ~= 'Palafin') return;
+			if (pokemon.species.forme ~= 'Hero') {
 				pokemon.formeChange('Palafin-Hero', this.effect, true);
 			}
 		},
@@ -5564,10 +5570,10 @@ local Abilities = {
 			this.effectState.switchingIn = true;
 		},
 		onStart = function(pokemon)
-			if (!this.effectState.switchingIn) return;
+			if (not this.effectState.switchingIn) return;
 			this.effectState.switchingIn = false;
-			if (pokemon.baseSpecies.baseSpecies !== 'Palafin') return;
-			if (!this.effectState.heroMessageDisplayed && pokemon.species.forme === 'Hero') {
+			if (pokemon.baseSpecies.baseSpecies ~= 'Palafin') return;
+			if (not this.effectState.heroMessageDisplayed and pokemon.species.forme == 'Hero') {
 				this.add('-activate', pokemon, 'ability = Zero to Hero');
 				this.effectState.heroMessageDisplayed = true;
 			}
@@ -5581,12 +5587,12 @@ local Abilities = {
 	-- CAP
 	mountaineer = {
 		onDamage = function(damage, target, source, effect)
-			if (effect && effect.id === 'stealthrock') {
+			if (effect and effect.id == 'stealthrock') {
 				return false;
 			}
 		},
 		onTryHit = function(target, source, move)
-			if (move.type === 'Rock' && !target.activeTurns) {
+			if (move.type == 'Rock' and not target.activeTurns) {
 				this.add('-immune', target, '[from] ability = Mountaineer');
 				return null;
 			}
@@ -5603,10 +5609,10 @@ local Abilities = {
 		onTryHit = function(target, source, move)
 			if (this.effectState.target.activeTurns) return;
 
-			if (target === source || move.hasBounced || !move.flags['reflectable']) {
+			if (target == source or move.hasBounced or not move.flags['reflectable']) {
 				return;
 			}
-			const newMove = this.dex.getActiveMove(move.id);
+			local newMove = this.dex.getActiveMove(move.id);
 			newMove.hasBounced = true;
 			this.actions.useMove(newMove, target, source);
 			return null;
@@ -5614,10 +5620,10 @@ local Abilities = {
 		onAllyTryHitSide = function(target, source, move)
 			if (this.effectState.target.activeTurns) return;
 
-			if (target.isAlly(source) || move.hasBounced || !move.flags['reflectable']) {
+			if (target.isAlly(source) or move.hasBounced or not move.flags['reflectable']) {
 				return;
 			}
-			const newMove = this.dex.getActiveMove(move.id);
+			local newMove = this.dex.getActiveMove(move.id);
 			newMove.hasBounced = true;
 			this.actions.useMove(newMove, this.effectState.target, source);
 			return null;
@@ -5639,3 +5645,4 @@ local Abilities = {
 		num = -4,
 	},
 };
+--]]
